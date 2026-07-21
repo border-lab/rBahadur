@@ -20,3 +20,6 @@ PackageUseDevtools: Yes
 PackageInstallArgs: --no-multiarch --with-keep.source
 PackageRoxygenize: rd,collate,namespace
 ..Rcheck
+
+## manuscript reprints kept locally, not part of the package
+/*.pdf
