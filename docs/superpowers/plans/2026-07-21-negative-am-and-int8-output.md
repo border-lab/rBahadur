@@ -17,6 +17,13 @@
 - `r` lies in the open interval `(-1, 1)`.
 - Style: no em dashes and no non-ASCII characters in R source, roxygen, or Markdown.
 - Target version is 1.1.0.
+- Negative `r` has a tighter Bahadur feasibility envelope than positive `r`,
+  measured during execution. Positive `r` was feasible in every configuration
+  tried. Negative `r` is reliably feasible to about `r = -0.4` at the default
+  `min_MAF = 0.1`, is marginal at `r = -0.6` (92 percent of seeds at m = 800,
+  n = 1500, min_MAF = 0.2), and degrades as `n` grows because infeasibility is
+  a tail event across individuals. Tests must stay inside the reliable range
+  and use fixed seeds. Do not write a test at `r = -0.6` with large `n`.
 
 ## File Structure
 
@@ -264,17 +271,20 @@ test_that("an invalid sign is rejected", {
 test_that("negative-r draws induce negative linkage disequilibrium", {
   skip_on_cran()
   set.seed(9)
-  m <- 300
+  m <- 800
   beta <- as.vector(scale(rnorm(m))) * sqrt(0.5 / m)
   AF <- runif(m, 0.2, 0.8)
   mu <- rep(AF, each = 2)
 
-  Uneg <- am_covariance_structure(beta, AF, -0.6)
-  Upos <- am_covariance_structure(beta, AF, 0.6)
+  ## r is held at 0.4 in magnitude: negative assortment leaves the Bahadur
+  ## feasible region well before positive assortment does, and r = -0.6 with
+  ## this n fails for a meaningful fraction of seeds
+  Uneg <- am_covariance_structure(beta, AF, -0.4)
+  Upos <- am_covariance_structure(beta, AF, 0.4)
   bu <- beta / sqrt(2 * AF * (1 - AF))
 
   gv <- function(U) {
-    H <- rb_dplr(3000, mu, U)
+    H <- rb_dplr(1500, mu, U)
     X <- H[, seq(1, 2 * m, 2)] + H[, seq(2, 2 * m, 2)]
     var(as.vector(X %*% bu))
   }
@@ -377,7 +387,9 @@ test_that("empirical heritability tracks h2_eq across the sign range", {
   skip_on_cran()
   set.seed(22)
   h2_0 <- 0.5
-  for (r in c(-0.6, -0.3, 0.3, 0.6)) {
+  ## negative r is held within the reliable Bahadur feasible range; see the
+  ## Global Constraints note on the negative-assortment envelope
+  for (r in c(-0.4, -0.2, 0.3, 0.6)) {
     d <- am_simulate(h2_0 = h2_0, r = r, m = 1500, n = 4000)
     emp <- var(as.vector(d$g)) / var(as.vector(d$y))
     expect_equal(emp, h2_eq(r, h2_0), tolerance = 0.05)
@@ -388,18 +400,18 @@ test_that("negative r reduces genetic variance and positive r inflates it", {
   skip_on_cran()
   set.seed(23)
   h2_0 <- 0.5
-  vneg <- var(as.vector(am_simulate(h2_0, -0.6, 1500, 4000)$g))
+  vneg <- var(as.vector(am_simulate(h2_0, -0.4, 1500, 4000)$g))
   vpos <- var(as.vector(am_simulate(h2_0, 0.6, 1500, 4000)$g))
   expect_lt(vneg, h2_0)
   expect_gt(vpos, h2_0)
-  expect_equal(vneg, vg_eq(-0.6, h2_0, h2_0), tolerance = 0.05)
+  expect_equal(vneg, vg_eq(-0.4, h2_0, h2_0), tolerance = 0.05)
   expect_equal(vpos, vg_eq(0.6, h2_0, h2_0), tolerance = 0.05)
 })
 
 test_that("allele frequencies are preserved under negative r", {
   skip_on_cran()
   set.seed(24)
-  d <- am_simulate(0.5, -0.6, 1500, 4000)
+  d <- am_simulate(0.5, -0.4, 1500, 4000)
   expect_gt(cor(d$AF, colMeans(d$X) / 2), 0.99)
 })
 ```
@@ -1225,6 +1237,19 @@ Change the `@param r` line and the `@return` block to:
 #' disassortative mating reduces it. The returned vector in that case is the
 #' analytic continuation of the positive branch, which is purely imaginary.
 #' For `r = 0` the vector is zero, since panmixia induces no disequilibrium.
+#'
+#' @section Feasibility under negative assortment:
+#' Disassortative mating leaves the Bahadur order-2 feasible region sooner
+#' than assortative mating does. The returned vector can satisfy the
+#' discriminant condition checked here and still drive [rb_dplr()] outside
+#' \[0, 1\] during sampling, because feasibility there is a property of the
+#' realized draws rather than of the parameters alone. Infeasibility becomes
+#' more likely as `n` grows, since it only takes one individual to fall
+#' outside the region. Empirically, negative `r` samples reliably down to
+#' about `r = -0.4` at the default `min_MAF`, whereas positive `r` was
+#' feasible in every configuration tested. If [rb_dplr()] reports infeasible
+#' probabilities, reduce the magnitude of `r`, raise `min_MAF`, or increase
+#' the number of causal variants.
 ```
 
 - [ ] **Step 2: Update the roxygen for `rb_dplr()`**
@@ -1315,7 +1340,10 @@ Insert above the `## version 1.0.0` section:
   diagonal minus low rank in that case, tracked by an `attr(U, "sign")` that
   `rb_dplr()` honors automatically.
 - fixed `am_covariance_structure()` returning `NaN` at `r = 0`
-- `rb_dplr()` gains a `sign` argument
+- `rb_dplr()` gains a `sign` argument, and its infeasibility error now names
+  the offending locus and suggests concrete remedies
+- documented that negative `r` leaves the Bahadur feasible region sooner than
+  positive `r`, reliably sampling to about `r = -0.4` at the default `min_MAF`
 - `am_simulate()` gains `path`, `format`, and `batch_size` for streaming
   genotypes to disk in batches, removing the full-matrix allocation
 - new `write_genotypes()` and `read_genotypes()` supporting individual-major
