@@ -34,9 +34,9 @@ test_that("sign = 1 is bit-identical to passing no sign at all", {
 
   ## Also test with U carrying the sign attribute from am_covariance_structure
   U_with_attr <- am_covariance_structure(beta, AF, 0.4)
-  set.seed(8); c <- rb_dplr(30, mu, U_with_attr)
-  set.seed(8); d <- rb_dplr(30, mu, U_with_attr, sign = 1)
-  expect_identical(c, d)
+  set.seed(8); no_sign_arg <- rb_dplr(30, mu, U_with_attr)
+  set.seed(8); explicit_sign <- rb_dplr(30, mu, U_with_attr, sign = 1)
+  expect_identical(no_sign_arg, explicit_sign)
 })
 
 test_that("an invalid sign is rejected", {
@@ -44,20 +44,47 @@ test_that("an invalid sign is rejected", {
 })
 
 test_that("infeasible probabilities trigger an actionable error message", {
-  ## Use deterministic inputs that drive the recursion out of range quickly
-  mu <- rep(0.5, 20)
-  U <- rep(0.9, 20)
+  ## Use deterministic inputs that drive the recursion out of range quickly.
+  ## The real invariant we want to guard is that the message is O(1) in the
+  ## number of loci, not O(m): a reintroduced full-vector dump would make the
+  ## message grow with the length of mu/U. An absolute length cap (e.g. under
+  ## 500 chars) cannot detect that at a small m, since a dumped 20-element
+  ## vector is already comfortably under such a cap. Instead, trigger the
+  ## same error at two very different sizes and confirm message length does
+  ## not grow with m.
+  get_infeasible_message <- function(m) {
+    mu <- rep(0.5, m)
+    U <- rep(0.9, m)
 
-  error_obj <- tryCatch(
-    rb_dplr(10, mu, U),
-    error = function(e) e
-  )
+    ## Guard the capture: if rb_dplr() unexpectedly succeeded, calling
+    ## conditionMessage() on a non-error result would itself throw an
+    ## obscure error instead of reporting a clear test failure.
+    result <- tryCatch(
+      rb_dplr(10, mu, U),
+      error = function(e) e
+    )
+    if (!inherits(result, "error")) {
+      fail(sprintf(
+        "rb_dplr() unexpectedly succeeded for m = %d instead of raising the infeasibility error",
+        m
+      ))
+      return(NA_character_)
+    }
+    conditionMessage(result)
+  }
 
-  msg <- conditionMessage(error_obj)
-  ## Check message begins with the documented prefix
-  expect_match(msg, "^Infeasible probabilities at locus")
-  ## Verify message is not a dumped vector: should be a few hundred chars at most
-  expect_lt(nchar(msg), 500)
+  msg_small <- get_infeasible_message(20)
+  msg_large <- get_infeasible_message(400)
+
+  ## Check both messages begin with the documented prefix
+  expect_match(msg_small, "^Infeasible probabilities at locus")
+  expect_match(msg_large, "^Infeasible probabilities at locus")
+
+  ## Verify message length is essentially constant across a 20x difference in
+  ## the number of loci: a dumped vector would make the m = 400 message
+  ## dramatically longer than the m = 20 message. Allow a small allowance for
+  ## extra locus-index digits.
+  expect_lt(abs(nchar(msg_large) - nchar(msg_small)), 10)
 })
 
 test_that("negative-r draws induce negative linkage disequilibrium", {
