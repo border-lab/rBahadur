@@ -19,11 +19,14 @@
 - Target version is 1.1.0.
 - Negative `r` has a tighter Bahadur feasibility envelope than positive `r`,
   measured during execution. Positive `r` was feasible in every configuration
-  tried. Negative `r` is reliably feasible to about `r = -0.4` at the default
-  `min_MAF = 0.1`, is marginal at `r = -0.6` (92 percent of seeds at m = 800,
-  n = 1500, min_MAF = 0.2), and degrades as `n` grows because infeasibility is
-  a tail event across individuals. Tests must stay inside the reliable range
-  and use fixed seeds. Do not write a test at `r = -0.6` with large `n`.
+  tried. Negative `r` degrades as `n` grows, because infeasibility is a tail
+  event across individuals: it only takes one individual to leave the region.
+  Measured points, all at `h2_0 = 0.5`: `r = -0.6` at m = 800, n = 1500 is 92
+  percent of seeds; `r = -0.4` at m = 1500, n = 2000 is 6 of 6 seeds but at
+  n = 4000 it fails for some seeds; `r = -0.3` at m = 1500, n = 4000 is 6 of 6
+  seeds. Raising `min_MAF` widens the envelope. Tests must stay inside the
+  reliable range and use fixed seeds. Verify feasibility across every seed a
+  test actually uses, not just one.
 
 ## File Structure
 
@@ -389,7 +392,7 @@ test_that("empirical heritability tracks h2_eq across the sign range", {
   h2_0 <- 0.5
   ## negative r is held within the reliable Bahadur feasible range; see the
   ## Global Constraints note on the negative-assortment envelope
-  for (r in c(-0.4, -0.2, 0.3, 0.6)) {
+  for (r in c(-0.3, -0.2, 0.3, 0.6)) {
     d <- am_simulate(h2_0 = h2_0, r = r, m = 1500, n = 4000)
     emp <- var(as.vector(d$g)) / var(as.vector(d$y))
     expect_equal(emp, h2_eq(r, h2_0), tolerance = 0.05)
@@ -400,18 +403,18 @@ test_that("negative r reduces genetic variance and positive r inflates it", {
   skip_on_cran()
   set.seed(23)
   h2_0 <- 0.5
-  vneg <- var(as.vector(am_simulate(h2_0, -0.4, 1500, 4000)$g))
+  vneg <- var(as.vector(am_simulate(h2_0, -0.3, 1500, 4000)$g))
   vpos <- var(as.vector(am_simulate(h2_0, 0.6, 1500, 4000)$g))
   expect_lt(vneg, h2_0)
   expect_gt(vpos, h2_0)
-  expect_equal(vneg, vg_eq(-0.4, h2_0, h2_0), tolerance = 0.05)
+  expect_equal(vneg, vg_eq(-0.3, h2_0, h2_0), tolerance = 0.05)
   expect_equal(vpos, vg_eq(0.6, h2_0, h2_0), tolerance = 0.05)
 })
 
 test_that("allele frequencies are preserved under negative r", {
   skip_on_cran()
   set.seed(24)
-  d <- am_simulate(0.5, -0.4, 1500, 4000)
+  d <- am_simulate(0.5, -0.3, 1500, 4000)
   expect_gt(cor(d$AF, colMeans(d$X) / 2), 0.99)
 })
 ```
@@ -1245,9 +1248,11 @@ Change the `@param r` line and the `@return` block to:
 #' \[0, 1\] during sampling, because feasibility there is a property of the
 #' realized draws rather than of the parameters alone. Infeasibility becomes
 #' more likely as `n` grows, since it only takes one individual to fall
-#' outside the region. Empirically, negative `r` samples reliably down to
-#' about `r = -0.4` at the default `min_MAF`, whereas positive `r` was
-#' feasible in every configuration tested. If [rb_dplr()] reports infeasible
+#' outside the region. Positive `r` was feasible in every configuration
+#' tested. Negative `r` was not: at `h2_0 = 0.5` and 1500 causal variants,
+#' `r = -0.3` sampled reliably at 4000 individuals, while `r = -0.4` sampled
+#' reliably at 2000 individuals but failed for some seeds at 4000. Raising
+#' `min_MAF` widens the envelope. If [rb_dplr()] reports infeasible
 #' probabilities, reduce the magnitude of `r`, raise `min_MAF`, or increase
 #' the number of causal variants.
 ```
