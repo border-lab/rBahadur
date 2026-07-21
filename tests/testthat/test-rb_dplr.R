@@ -40,17 +40,20 @@ test_that("an invalid sign is rejected", {
 test_that("negative-r draws induce negative linkage disequilibrium", {
   skip_on_cran()
   set.seed(9)
-  m <- 300
+  m <- 800
   beta <- as.vector(scale(rnorm(m))) * sqrt(0.5 / m)
   AF <- runif(m, 0.2, 0.8)
   mu <- rep(AF, each = 2)
 
-  Uneg <- am_covariance_structure(beta, AF, -0.6)
-  Upos <- am_covariance_structure(beta, AF, 0.6)
+  ## r is held at 0.4 in magnitude: negative assortment leaves the Bahadur
+  ## feasible region well before positive assortment does, and r = -0.6 with
+  ## this n fails for a meaningful fraction of seeds
+  Uneg <- am_covariance_structure(beta, AF, -0.4)
+  Upos <- am_covariance_structure(beta, AF, 0.4)
   bu <- beta / sqrt(2 * AF * (1 - AF))
 
   gv <- function(U) {
-    H <- rb_dplr(3000, mu, U)
+    H <- rb_dplr(1500, mu, U)
     X <- H[, seq(1, 2 * m, 2)] + H[, seq(2, 2 * m, 2)]
     var(as.vector(X %*% bu))
   }

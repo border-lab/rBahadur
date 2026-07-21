@@ -5,6 +5,19 @@
   if (is.null(s)) 1 else s
 }
 
+## Build a single, actionable infeasibility message naming the offending
+## locus. "Infeasible probabilities" must stay the leading text: an existing
+## test in test-am_stream.R matches on it and a later task depends on that
+## wording.
+.rb_infeasible_msg <- function(locus) {
+  paste0(
+    "Infeasible probabilities at locus ", locus, ". The specified ",
+    "parameters do not correspond to a valid Bahadur order-2 MVB ",
+    "distribution. Try reducing the magnitude of r, raising min_MAF, ",
+    "or increasing the number of causal variants."
+  )
+}
+
 #' Binary random variates with Diagonal Plus Low Rank (dplr) correlations
 #'
 #' Generate second Bahadur order multivariate Bernoulli random variates with
@@ -97,8 +110,7 @@ rb_dplr <- function(n, mu, U, sign = NULL) {
   for (m in 2:(M-1)) {
     p <- mu[m] + s * x * U[m]
     if (any(p < 0 | p > 1)) {
-      stop('Infeasible probabilities. Are you sure specified parameters correspond to 
-           a valid Bahadur order-2 MVB distribution?')
+      stop(.rb_infeasible_msg(m))
     }
     k[ ,m] <- (rand_U[ ,m] <= p)
 
@@ -112,8 +124,7 @@ rb_dplr <- function(n, mu, U, sign = NULL) {
   }
   p <- mu[M] + s * x * U[M]
   if (any(p < 0 | p > 1)) {
-    stop(mu[M],' ',p,'Infeasible probabilities. Are you sure specified parameters
-         correspond to a valid Bahadur order-2 MVB distribution?')
+    stop(.rb_infeasible_msg(M))
   }
   k[ ,M] <-(rand_U[ ,M] <= p)
 
