@@ -31,10 +31,33 @@ test_that("sign = 1 is bit-identical to passing no sign at all", {
   set.seed(8); a <- rb_dplr(30, mu, U)
   set.seed(8); b <- rb_dplr(30, mu, U, sign = 1)
   expect_identical(a, b)
+
+  ## Also test with U carrying the sign attribute from am_covariance_structure
+  U_with_attr <- am_covariance_structure(beta, AF, 0.4)
+  set.seed(8); c <- rb_dplr(30, mu, U_with_attr)
+  set.seed(8); d <- rb_dplr(30, mu, U_with_attr, sign = 1)
+  expect_identical(c, d)
 })
 
 test_that("an invalid sign is rejected", {
   expect_error(rb_dplr(5, rep(0.5, 6), rep(0.01, 6), sign = 0), "either 1 or -1")
+})
+
+test_that("infeasible probabilities trigger an actionable error message", {
+  ## Use deterministic inputs that drive the recursion out of range quickly
+  mu <- rep(0.5, 20)
+  U <- rep(0.9, 20)
+
+  error_obj <- tryCatch(
+    rb_dplr(10, mu, U),
+    error = function(e) e
+  )
+
+  msg <- conditionMessage(error_obj)
+  ## Check message begins with the documented prefix
+  expect_match(msg, "^Infeasible probabilities at locus")
+  ## Verify message is not a dumped vector: should be a few hundred chars at most
+  expect_lt(nchar(msg), 500)
 })
 
 test_that("negative-r draws induce negative linkage disequilibrium", {
