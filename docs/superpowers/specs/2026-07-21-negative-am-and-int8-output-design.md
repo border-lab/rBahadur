@@ -249,10 +249,11 @@ The package currently has no `tests/` directory. Add `tests/testthat` and
 - Cleaning the 17 stray lines in `.gitignore` that were pasted from
   `rBahadur.Rproj` and match nothing. Noted separately, not part of this work.
 
-## Open question
+## Resolved decisions
 
-The names `write_genotypes()` and `read_genotypes()` do not follow either
-existing prefix convention in the package, which uses `rb_` for Bahadur
-samplers and `am_` for assortative mating helpers. They are genuinely neither.
-The alternative is `am_write_genotypes()` and `am_read_genotypes()` for
-namespace consistency at the cost of a slightly misleading prefix.
+Naming: `write_genotypes()` and `read_genotypes()`, without a prefix. These
+follow neither the `rb_` convention for Bahadur samplers nor the `am_`
+convention for assortative mating helpers, because the functions are genuinely
+neither. An accurate name was preferred over namespace consistency.
+
+Design approved 2026-07-21.
