@@ -186,9 +186,13 @@ writes and the two layouts disagree about what "sequential" means.
 `batch_size = NULL` picks a batch targeting roughly a 128 MB working buffer,
 clamped to at least 1 and at most the relevant dimension.
 
-Because the two layouts consume random numbers in different orders, the
-streaming `"variant"` path is not bit-identical to the `"individual"` path
-under the same seed. This is documented rather than engineered around.
+Reproducibility turned out better than expected once verified. Because R fills
+matrices column-major, drawing `runif(n)` once per locus consumes the random
+stream in exactly the order `matrix(runif(2*m*n), n, 2*m)` does. The
+locus-blocked path therefore reproduces the in-memory result bit for bit at
+*any* block size, not just at the maximum. The individual-batched path is bit
+identical only when `batch_size >= n`, since a batch of rows is not contiguous
+in a column-major draw. Both statements become tests.
 
 ### Buffers
 
