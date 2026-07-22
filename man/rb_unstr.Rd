@@ -31,7 +31,7 @@ are zero.
 }
 \examples{
 set.seed(1)
-h2_0 = .5; m = 200; n = 500; r =.5; min_MAF=.1
+h2_0 = .5; m = 60; n = 200; r =.5; min_MAF=.1
 
 ## draw standardized diploid allele substitution effects
 beta <- scale(rnorm(m))*sqrt(h2_0 / m)
