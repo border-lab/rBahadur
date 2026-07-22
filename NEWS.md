@@ -9,6 +9,14 @@
   diagonal minus low rank in that case, tracked by an `attr(U, "sign")` that
   `rb_dplr()` honors automatically.
 - fixed `am_covariance_structure()` returning `NaN` at `r = 0`
+- fixed `h2_eq()` returning `NaN` at `r = 0`, where the answer is just `h2_0`,
+  since no assortment leaves heritability where it started. The closed form
+  divided by `2r` when the bracket it multiplied also vanished there, and the
+  same cancellation made small `r` ill conditioned: at `r = 1e-12` it was wrong
+  in the fifth digit. It is now defined through `vg_eq()`, as equilibrium
+  genetic variance over equilibrium total variance, which divides by nothing
+  that vanishes. `rbahadur simulate --r 0` previously reported
+  `equilibrium h2 NaN`.
 - `rb_dplr()` gains a `sign` argument, and its infeasibility error now names
   the offending locus and suggests concrete remedies
 - documented that negative `r` leaves the Bahadur feasible region sooner than

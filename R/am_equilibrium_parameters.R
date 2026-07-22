@@ -27,8 +27,18 @@ NULL
 #' @rdname am_equilibrium_parameters
 #' @export
 h2_eq <- function(r, h2_0){
-  1/(2*r) *
-    (1/(1-h2_0) -  sqrt((1-h2_0)^-2 - 4*r*h2_0/(1-h2_0)))
+  ## Equilibrium heritability is equilibrium genetic variance over equilibrium
+  ## total variance, and assortative mating leaves the environmental component
+  ## at its generation zero value of 1 - h2_0. Heritability is scale free, so
+  ## taking var(y) = 1 at generation zero, and hence vg_0 = h2_0, costs no
+  ## generality.
+  ##
+  ## Written out directly this is 1/(2r) times a bracket that also vanishes at
+  ## r = 0, which is 0/0 there: panmixia would report NaN rather than h2_0,
+  ## and small r was ill conditioned by the same cancellation. Going through
+  ## rg_eq() removes both, since nothing divides by r.
+  vg <- vg_eq(r, h2_0, h2_0)
+  vg / (vg + 1 - h2_0)
 }
 
 #' @rdname am_equilibrium_parameters
