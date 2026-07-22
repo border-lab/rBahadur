@@ -20,6 +20,8 @@ Language: en-US
 Depends:
     R (>= 3.3.0),
     stats
+Imports:
+    utils
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.1
 Suggests:

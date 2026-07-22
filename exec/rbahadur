@@ -1,0 +1,8 @@
+#!/usr/bin/env Rscript
+
+## Thin shim around rBahadur::rbahadur_main(). All logic lives in the package
+## so that it is unit testable; this file only translates the return value into
+## a process exit status.
+
+status <- rBahadur::rbahadur_main(commandArgs(trailingOnly = TRUE))
+quit(save = "no", status = if (length(status) == 1L) as.integer(status) else 0L)
