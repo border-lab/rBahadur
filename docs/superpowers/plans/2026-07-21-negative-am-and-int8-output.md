@@ -829,7 +829,11 @@ git commit -m "add PLINK bed genotype output"
 - Test: `tests/testthat/test-am_stream.R`
 
 **Interfaces:**
-- Consumes: `.rb_sign()` from Task 2.
+- Consumes: `.rb_sign()` and `.rb_infeasible_msg()` from Task 2, both in
+  `R/rb_dplr.R`. Reuse `.rb_infeasible_msg(locus)` for the infeasibility error
+  rather than writing the message inline, so the streaming and non-streaming
+  paths cannot drift apart. Its leading text is "Infeasible probabilities",
+  which this task's test matches on.
 - Produces: `.rb_dplr_stream(n, mu, U, s = 1, block = 1024L, callback)`. The callback is invoked as `callback(B, col0)` where `B` is an `n` by `k` numeric 0/1 matrix and `col0` is the 1-based global index of `B`'s first column. Returns `NULL` invisibly.
 
 The key property, verified before this plan was written, is that drawing `runif(n)` once per column consumes the random stream in exactly the order `matrix(runif(M*n), n, M)` does, because R fills matrices column-major. `.rb_dplr_stream()` is therefore bit-identical to `rb_dplr()` at any block size.
@@ -920,9 +924,7 @@ Create `R/am_stream.R`:
   for (m in seq_len(M)) {
     p <- if (m == 1L) rep(mu[1], n) else mu[m] + s * x * U[m]
     if (any(!is.finite(p) | p < 0 | p > 1)) {
-      stop("Infeasible probabilities at column ", m,
-           ". Are you sure the specified parameters correspond to a valid ",
-           "Bahadur order-2 MVB distribution?")
+      stop(.rb_infeasible_msg(m))
     }
     km <- as.integer(runif(n) <= p)
     bi <- bi + 1L
