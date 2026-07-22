@@ -1,0 +1,11 @@
+bibentry(
+  bibtype  = "Article",
+  title    = "rBahadur: efficient simulation of structured high-dimensional genotype data with applications to assortative mating",
+  author   = "Richard Border and Osman Asif Malik",
+  journal  = "BMC Bioinformatics",
+  year     = "2023",
+  volume   = "24",
+  number   = "314",
+  pages    = "",
+  doi      = "10.1186/s12859-023-05442-6"
+)
