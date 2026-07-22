@@ -6,3 +6,5 @@
 ^CRAN-SUBMISSION$
 ^revdep$
 ^[^/]*\.pdf$
+^docs$
+^\.superpowers$

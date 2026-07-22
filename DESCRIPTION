@@ -1,17 +1,18 @@
 Package: rBahadur
 Title: Assortative Mating Simulation and Multivariate Bernoulli Variates
-Version: 1.0.0
+Version: 1.1.0
 Authors@R: 
     c(person("Richard", "Border", 
              email= "border.richard@gmail.com", role = c("aut", "cre"),
              comment = c(ORCID = "0000-0002-6293-2968")),
       person("Osman", "Malik", , "oamalik@lbl.gov", role = c("aut"),
              comment = c(ORCID = "0000-0003-4477-481X")))
-Description: Simulation of phenotype / genotype data under assortative mating. 
-    Includes functions for generating Bahadur order-2 multivariate Bernoulli 
-    variables with general and diagonal-plus-low-rank correlation structures. 
-    Further details are provided in: Border and Malik (2022) 
-    <doi:10.1101/2022.10.13.512132>.
+Description: Simulation of phenotype / genotype data under assortative and
+    disassortative mating. Includes functions for generating Bahadur order-2
+    multivariate Bernoulli variables with general and diagonal-plus-low-rank
+    correlation structures, and for writing simulated genotypes to disk as
+    binary int8 or PLINK bed files. Further details are provided in:
+    Border and Malik (2022) <doi:10.1101/2022.10.13.512132>.
 URL: https://github.com/rborder/rBahadur
 License: GPL (>= 3)
 Encoding: UTF-8
@@ -20,4 +21,7 @@ Depends:
     R (>= 3.3.0),
     stats
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.2.3
+RoxygenNote: 7.3.1
+Suggests:
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3

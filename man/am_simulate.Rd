@@ -4,12 +4,24 @@
 \alias{am_simulate}
 \title{Simulate genotype/phenotype data under equilibrium univariate AM.}
 \usage{
-am_simulate(h2_0, r, m, n, afs = NULL, min_MAF = 0.1, haplotypes = FALSE)
+am_simulate(
+  h2_0,
+  r,
+  m,
+  n,
+  afs = NULL,
+  min_MAF = 0.1,
+  haplotypes = FALSE,
+  path = NULL,
+  format = c("individual", "variant", "bed"),
+  batch_size = NULL
+)
 }
 \arguments{
 \item{h2_0}{generation zero (panmictic) heritability}
 
-\item{r}{cross-mate phenotypic correlation}
+\item{r}{cross-mate phenotypic correlation, in the open interval (-1, 1).
+Negative values correspond to disassortative mating.}
 
 \item{m}{number of biallelic causal variants}
 
@@ -23,21 +35,45 @@ Ignored if if \code{afs} is not NULL. Defaults to 0.1}
 
 \item{haplotypes}{logical. If TRUE, includes (phased) haploid genotypes in output.
 Defaults to FALSE}
+
+\item{path}{(optional) file prefix. If supplied, genotypes are streamed to
+disk in batches rather than returned in memory, and \code{X} is omitted from
+the result. Writes \verb{<path>.int8} for \code{format} \code{"individual"} or
+\code{"variant"}, or \verb{<path>.bed} plus \verb{<path>.bim} and \verb{<path>.fam} for
+\code{"bed"}, and in every case also writes \verb{<path>.meta} and \verb{<path>.rds}.}
+
+\item{format}{on-disk layout when \code{path} is supplied. \code{"individual"} (the
+default) stores each individual's variants contiguously in one byte per
+genotype, \code{"variant"} stores each variant's individuals contiguously, and
+\code{"bed"} writes a variant-major PLINK binary file at two bits per genotype
+alongside \code{.bim} and \code{.fam}.}
+
+\item{batch_size}{(optional) number of individuals per batch for
+\code{"individual"}, or variants per block for \code{"variant"} and \code{"bed"}.
+Defaults to a value targeting a working buffer of roughly 128 MB, but
+actual peak memory use is roughly 3 times that: the \code{"individual"}
+branch also allocates \code{\link[=rb_dplr]{rb_dplr()}}'s equally sized \code{rand_U} matrix plus
+the \code{Xb}/\code{t(Xb)} copies, and the \code{"variant"}/\code{"bed"} branches also copy
+the buffer passed to the callback and build a double-precision \code{Xb}
+from it.}
 }
 \value{
-A list including the following objects:
-\itemize{
-\item \code{y}: phenotype vector
-\item \code{g}: heritable component of the phenotype vector
-\item \code{X}: matrix of diploid genotypes
-\item \code{AF}: vector of allele frequencies
-\item \code{beta_std}: standardized genetic effects
-\item \code{beta_raw}: unstandardized genetic effects
-\item \code{H}: matrix of haploid genotypes (returned only if \code{haplotypes}=TRUE)
-}
+A list. Without \code{path} it contains \code{y}, \code{g}, \code{X}, \code{AF}, \code{beta_std},
+\code{beta_raw}, and \code{H} when \code{haplotypes} is TRUE. With \code{path} it is returned
+invisibly, omits \code{X}, and adds \code{path}, \code{format}, \code{n}, \code{m}, \code{h2_0}, \code{r}, and
+\code{min_MAF}; these are also saved in \verb{<path>.rds} as the call's provenance
+record.
 }
 \description{
 Simulate genotype/phenotype data under equilibrium univariate AM.
+}
+\details{
+The \code{"variant"} and \code{"bed"} layouts stream over loci and reproduce
+the in-memory genotypes exactly under a given seed at any \code{batch_size}. The
+\code{"individual"} layout streams over people and matches only when
+\code{batch_size >= n}, because a batch of rows is not contiguous in R's
+column-major random draw. \code{haplotypes = TRUE} cannot be combined with
+\code{path}.
 }
 \examples{
 set.seed(1)
@@ -50,4 +86,13 @@ str(sim_dat)
 ## empirical h2 vs expected equilibrium h2
 (emp_h2 <- var(sim_dat$g)/var(sim_dat$y))
 h2_eq(r, h2_0)
+
+## stream genotypes to disk instead of holding them in memory
+p <- file.path(tempdir(), "am_sim")
+meta <- am_simulate(h2_0, r, m, n, path = p, format = "variant")
+dim(read_genotypes(p))
+
+## disassortative mating
+neg <- am_simulate(h2_0, -0.3, m, n)
+var(neg$g) < var(sim_dat$g)
 }

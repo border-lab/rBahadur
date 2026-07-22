@@ -1,6 +1,26 @@
+## Resolve the low-rank sign for a loading vector, defaulting to +1 so that
+## hand-built `U` vectors and pre-1.1.0 code keep working.
+.rb_sign <- function(U) {
+  s <- attr(U, "sign")
+  if (is.null(s)) 1 else s
+}
+
+## Build a single, actionable infeasibility message naming the offending
+## locus. "Infeasible probabilities" must stay the leading text: an existing
+## test in test-am_stream.R matches on it and a later task depends on that
+## wording.
+.rb_infeasible_msg <- function(locus) {
+  paste0(
+    "Infeasible probabilities at locus ", locus, ". The specified ",
+    "parameters do not correspond to a valid Bahadur order-2 MVB ",
+    "distribution. Try reducing the magnitude of r, raising min_MAF, ",
+    "or increasing the number of causal variants."
+  )
+}
+
 #' Binary random variates with Diagonal Plus Low Rank (dplr) correlations
 #'
-#' Generate second Bahadur order multivariate Bernoulli random variates with 
+#' Generate second Bahadur order multivariate Bernoulli random variates with
 #' Diagonal Plus Low Rank (dplr) correlation structures.
 #'
 #' @importFrom stats runif
@@ -8,17 +28,32 @@
 #' @param n number of observations
 #' @param mu vector of means
 #' @param U outer product component matrix
+#' @param sign either 1 or -1, selecting \eqn{C = D + U U^T} or
+#'   \eqn{C = D - U U^T}. Defaults to `attr(U, "sign")` when present and to 1
+#'   otherwise, so vectors from [am_covariance_structure()] carry the correct
+#'   structure automatically.
 #'
-#' @details This generates multivariate Bernoulli (MVB) random vectors with mean 
+#' @details This generates multivariate Bernoulli (MVB) random vectors with mean
 #' vector 'mu' and correlation matrix \eqn{C = D + U U^T} where \eqn{D} is a diagonal
-#'  matrix with values dictated by 'U'. 'mu' must take values in the open unit interval 
-#'  and 'U' must induce a valid second Bahadur order probability distribution. That is, 
-#'  there must exist an MVB probability distribution with first moments 'mu' and 
-#'  standardized central second moments \eqn{C} such that all higher order central 
+#'  matrix with values dictated by 'U'. 'mu' must take values in the open unit interval
+#'  and 'U' must induce a valid second Bahadur order probability distribution. That is,
+#'  there must exist an MVB probability distribution with first moments 'mu' and
+#'  standardized central second moments \eqn{C} such that all higher order central
 #'  moments are zero.
 #'
-#' @return An \eqn{n}-by-\eqn{m} matrix of binary random variates, where \eqn{m} is 
+#' @return An \eqn{n}-by-\eqn{m} matrix of binary random variates, where \eqn{m} is
 #' the length of 'mu'.
+#'
+#' @section Warning, dropping the sign attribute:
+#' `U` vectors produced by [am_covariance_structure()] carry
+#' `attr(U, "sign")`. Subsetting or coercing `U`, including with
+#' \code{as.vector()}, \code{c()}, or `U[i]`, drops that attribute. Because
+#' `sign` here falls back to `+1` when the attribute is absent, doing so
+#' silently converts a disassortative structure into an assortative one, with
+#' no error at any point. If you manipulate `U` before calling `rb_dplr()`,
+#' pass `sign = -1` explicitly rather than relying on the attribute to
+#' survive.
+#'
 #' @export
 #'
 #' @examples
@@ -60,7 +95,14 @@
 #' (emp_h2 <- var(heritable_y)/var(y))
 #' h2_eq(r, h2_0)
 
-rb_dplr <- function(n, mu, U) {
+rb_dplr <- function(n, mu, U, sign = NULL) {
+
+  if (is.null(sign)) sign <- .rb_sign(U)
+  if (length(sign) != 1L || !sign %in% c(-1, 1)) {
+    stop("`sign` must be either 1 or -1")
+  }
+  ## bind to a local name so the argument does not shadow base::sign()
+  s <- sign
 
   M <- length(mu)
 
@@ -81,10 +123,9 @@ rb_dplr <- function(n, mu, U) {
 
   # recursive steps
   for (m in 2:(M-1)) {
-    p <- mu[m] + x * U[m]
-    if (any(p < 0 | p > 1)) {
-      stop('Infeasible probabilities. Are you sure specified parameters correspond to 
-           a valid Bahadur order-2 MVB distribution?')
+    p <- mu[m] + s * x * U[m]
+    if (any(!is.finite(p) | p < 0 | p > 1)) {
+      stop(.rb_infeasible_msg(m))
     }
     k[ ,m] <- (rand_U[ ,m] <= p)
 
@@ -96,10 +137,9 @@ rb_dplr <- function(n, mu, U) {
     x <- (x*Bk0 + c*Bk1*U[m])/p
     c <- (Bk0/p)*c
   }
-  p <- mu[M] + x*U[M]
-  if (any(p < 0 | p > 1)) {
-    stop(mu[M],' ',p,'Infeasible probabilities. Are you sure specified parameters
-         correspond to a valid Bahadur order-2 MVB distribution?')
+  p <- mu[M] + s * x * U[M]
+  if (any(!is.finite(p) | p < 0 | p > 1)) {
+    stop(.rb_infeasible_msg(M))
   }
   k[ ,M] <-(rand_U[ ,M] <= p)
 

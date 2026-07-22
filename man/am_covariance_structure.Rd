@@ -11,17 +11,56 @@ am_covariance_structure(beta, AF, r)
 
 \item{AF}{vector of allele frequencies}
 
-\item{r}{cross-mate phenotypic correlation}
+\item{r}{cross-mate phenotypic correlation, in the open interval (-1, 1).
+Negative values correspond to disassortative mating.}
 }
 \value{
-Vector 'U' such that $D + U U^T$ corresponds to the expected haploid
-LD-matrix given the specified genetic architecture (encoded by 'beta' and 'AF')
-and cross-mate phenotypic correlation 'r'. It is assumed that the total phenotypic
+Vector 'U' such that \eqn{D + s U U^T} corresponds to the expected
+haploid LD-matrix given the specified genetic architecture (encoded by 'beta'
+and 'AF') and cross-mate phenotypic correlation 'r', where the sign
+\eqn{s} is \code{attr(U, "sign")}. It is assumed that the total phenotypic
 variance at generation zero is one.
 }
 \description{
 Compute Diagonal plus Low Rank equilibrium covariance structure
 }
+\details{
+For \code{r > 0} the low-rank term is added and \code{attr(U, "sign")} is 1.
+For \code{r < 0} it is subtracted and the attribute is -1, because a positive
+semidefinite rank-one term can only increase genetic variance whereas
+disassortative mating reduces it. The returned vector in that case is the
+analytic continuation of the positive branch, which is purely imaginary.
+For \code{r = 0} the vector is zero, since panmixia induces no disequilibrium.
+}
+\section{Warning, dropping the sign attribute}{
+
+The returned vector carries \code{attr(U, "sign")}, which records whether the
+rank-one term is added or subtracted. Subsetting or coercing the vector,
+including with \code{as.vector()}, \code{c()}, or \code{U[i]}, drops that
+attribute. Because \code{\link[=rb_dplr]{rb_dplr()}} falls back to \code{sign = 1} when the attribute
+is absent, this silently turns a disassortative structure into an
+assortative one, with no error at any point. If you manipulate \code{U} before
+passing it to \code{\link[=rb_dplr]{rb_dplr()}}, pass \code{sign = -1} explicitly for \code{r < 0}
+rather than relying on the attribute to survive.
+}
+
+\section{Feasibility under negative assortment}{
+
+Disassortative mating leaves the Bahadur order-2 feasible region sooner
+than assortative mating does. The returned vector can satisfy the
+discriminant condition checked here and still drive \code{\link[=rb_dplr]{rb_dplr()}} outside
+[0, 1] during sampling, because feasibility there is a property of the
+realized draws rather than of the parameters alone. Infeasibility becomes
+more likely as \code{n} grows, since it only takes one individual to fall
+outside the region. Positive \code{r} was feasible in every configuration
+tested. Negative \code{r} was not: at \code{h2_0 = 0.5} and 1500 causal variants,
+\code{r = -0.3} sampled reliably at 4000 individuals, while \code{r = -0.4} sampled
+reliably at 2000 individuals but failed for some seeds at 4000. Raising
+\code{min_MAF} widens the envelope. If \code{\link[=rb_dplr]{rb_dplr()}} reports infeasible
+probabilities, reduce the magnitude of \code{r}, raise \code{min_MAF}, or increase
+the number of causal variants.
+}
+
 \examples{
 set.seed(1)
 h2_0 = .5; m = 200; n = 1000; r =.5; min_MAF=.1
