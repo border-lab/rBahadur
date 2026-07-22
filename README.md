@@ -26,6 +26,9 @@
   * Genotype input / output
     * `write_genotypes`: write genotypes as int8 or PLINK bed
     * `read_genotypes`: read genotypes back into an R matrix
+* Command line interface
+  * `rbahadur simulate`: stream a simulation to disk without opening R
+  * `rbahadur info`: inspect an existing run and verify it is intact
 
 
 ## Installation
@@ -167,6 +170,55 @@ write.csv(data.frame(AF = out$AF, beta_std = out$beta_std,
                      beta_raw = out$beta_raw),
           paste0(p, "_variants.csv"), row.names = FALSE)
 ```
+
+## Command line interface
+
+For generating data outside an R session, the package ships an `rbahadur`
+executable. Put it on your path with:
+
+```bash
+ln -s $(Rscript -e "cat(rBahadur::rbahadur_cli_path())") ~/bin/rbahadur
+```
+
+`rbahadur simulate` streams straight to disk, so it never holds the genotype
+matrix in memory:
+
+```bash
+rbahadur simulate --h2 0.5 --r -0.3 --m 200 --n 1001 \
+                  --out run1 --format bed --seed 7 --csv
+```
+```
+wrote run1.bed (49 Kb)
+  1001 individuals x 200 variants, format bed
+  equilibrium h2 0.4673, genetic variance 0.4385
+  also wrote run1_pheno.csv and run1_variants.csv
+```
+
+`--seed` makes a run reproducible, and `--csv` adds `_pheno.csv` and
+`_variants.csv` alongside the R-only `.rds`, which is what you want when the
+downstream analysis is in Python. Run `rbahadur --help` for the full list.
+
+`rbahadur info` reports what a prefix contains and checks the data file
+against its metadata, which catches a truncated transfer:
+
+```bash
+rbahadur info run1
+```
+```
+prefix    run1
+format    bed
+dtype     bed2bit
+n         1001 individuals
+m         200 variants
+data      run1.bed
+size      50203 bytes actual, 50203 expected
+status    ok
+```
+
+Exit status is `0` on success, `1` for a usage error such as a misspelled
+option, and `2` when a run starts and then fails, for example when the
+requested disassortative `r` falls outside the Bahadur feasible region. That
+split lets a calling script tell a typo from a genuine modelling failure.
 
 ## Citation
 
