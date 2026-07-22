@@ -218,10 +218,22 @@ published supplement falls into.
   `cran-comments.md` lists only local Ubuntu, because that is all that has
   actually been run. Add win-builder and macOS results, or R-hub, before
   submission.
-- Locally the check reports one NOTE, "Skipping checking HTML validation: no
-  command 'tidy' found". That is this machine lacking `tidy`, not the package.
-  With `_R_CHECK_RD_VALIDATE_RD2HTML_=FALSE` the status is OK with no notes at
-  all, which is what `cran-comments.md` claims.
+- `tidy` was missing on this machine, so the check reported one NOTE,
+  "Skipping checking HTML validation: no command 'tidy' found". That was the
+  environment rather than the package. With `tidy` on the path the HTML check
+  passes and the run is `Status: OK`, zero errors, warnings, and notes, which
+  is what `cran-comments.md` claims. Install it with
+  `sudo apt-get install tidy`. Without root,
+  `apt-get download tidy libtidy5deb1` and `dpkg -x` into a prefix works, with
+  that prefix's `usr/bin` on `PATH` and `usr/lib/x86_64-linux-gnu` on
+  `LD_LIBRARY_PATH`.
+- **Nothing is pushed.** `origin/main` is still `b887de3` from 2023-08-25, the
+  1.0.0 era, so every commit of 1.1.0 is local only: 38 of them, 23 dated
+  2026-07-21 and 15 dated 2026-07-22.
+- `git remote origin` points at `git@github.com:rborder/rBahadur.git` while
+  `DESCRIPTION` now declares `border-lab`. Both resolve, because GitHub
+  redirects the old name, but they disagree, and the redirect is the same thing
+  `--as-cran` flagged in the `URL:` field. Worth reconciling before pushing.
 - If you ever regenerate `inst/extdata/kg_chr22_panel.rds`, save it with
   `version = 2` or the R dependency floor silently jumps to 3.5.0 again.
 
