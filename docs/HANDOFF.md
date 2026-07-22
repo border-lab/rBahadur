@@ -210,9 +210,18 @@ published supplement falls into.
 
 ### Release chores
 
-- `cran-comments.md` still reads "This is a new release. 0 errors | 0 warnings
-  | 1 note" and needs rewriting for 1.1.0. It is now accurate to claim zero
-  notes under `--as-cran`.
+- `cran-comments.md` has been rewritten for 1.1.0: a minor release rather than
+  a new one, 0/0/0, the three `--as-cran` fixes listed, and no reverse
+  dependencies, which was confirmed against the CRAN package database rather
+  than assumed.
+- **Still to do before submitting: check on a platform other than this one.**
+  `cran-comments.md` lists only local Ubuntu, because that is all that has
+  actually been run. Add win-builder and macOS results, or R-hub, before
+  submission.
+- Locally the check reports one NOTE, "Skipping checking HTML validation: no
+  command 'tidy' found". That is this machine lacking `tidy`, not the package.
+  With `_R_CHECK_RD_VALIDATE_RD2HTML_=FALSE` the status is OK with no notes at
+  all, which is what `cran-comments.md` claims.
 - If you ever regenerate `inst/extdata/kg_chr22_panel.rds`, save it with
   `version = 2` or the R dependency floor silently jumps to 3.5.0 again.
 
