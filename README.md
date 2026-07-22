@@ -23,6 +23,9 @@
   * Generate genotype / phenotype data given initial conditions
     * `am_simulate`: complete univariate genotype / phenotype simulation
     * `am_covariance_structure`: compute outer-product covariance component for AM-induced DPLR covariance structure
+  * Genotype input / output
+    * `write_genotypes`: write genotypes as int8 or PLINK bed
+    * `read_genotypes`: read genotypes back into an R matrix
 
 
 ## Installation
@@ -73,6 +76,24 @@ We compare the expected equilibrium heritability to that realized in simulation:
 ## empirical h2 vs expected equilibrium h2
 (emp_h2 <- var(sim_dat$g)/var(sim_dat$y))
 h2_eq(r, .5)
+```
+
+Negative values of `r` correspond to disassortative mating, which reduces
+genetic variance rather than inflating it:
+
+```r
+neg <- am_simulate(h2_0, r = -.5, m, n)
+var(neg$g)
+vg_eq(-.5, h2_0, h2_0)
+```
+
+For simulations too large to hold in memory, supply `path` to stream genotypes
+to disk one batch at a time:
+
+```r
+p <- file.path(tempdir(), "am_sim")
+meta <- am_simulate(h2_0, r, m = 2e4, n = 5e3, path = p, format = "variant")
+X <- read_genotypes(p)
 ```
 
 ## Citation

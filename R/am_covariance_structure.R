@@ -4,12 +4,36 @@
 #'
 #' @param beta vector of standardized diploid allele-substitution effects
 #' @param AF vector of allele frequencies
-#' @param r cross-mate phenotypic correlation
+#' @param r cross-mate phenotypic correlation, in the open interval (-1, 1).
+#'   Negative values correspond to disassortative mating.
 #'
-#' @return Vector 'U' such that $D + U U^T$ corresponds to the expected haploid 
-#' LD-matrix given the specified genetic architecture (encoded by 'beta' and 'AF') 
-#' and cross-mate phenotypic correlation 'r'. It is assumed that the total phenotypic
+#' @return Vector 'U' such that \eqn{D + s U U^T} corresponds to the expected
+#' haploid LD-matrix given the specified genetic architecture (encoded by 'beta'
+#' and 'AF') and cross-mate phenotypic correlation 'r', where the sign
+#' \eqn{s} is `attr(U, "sign")`. It is assumed that the total phenotypic
 #' variance at generation zero is one.
+#'
+#' @details For \code{r > 0} the low-rank term is added and `attr(U, "sign")` is 1.
+#' For \code{r < 0} it is subtracted and the attribute is -1, because a positive
+#' semidefinite rank-one term can only increase genetic variance whereas
+#' disassortative mating reduces it. The returned vector in that case is the
+#' analytic continuation of the positive branch, which is purely imaginary.
+#' For \code{r = 0} the vector is zero, since panmixia induces no disequilibrium.
+#'
+#' @section Feasibility under negative assortment:
+#' Disassortative mating leaves the Bahadur order-2 feasible region sooner
+#' than assortative mating does. The returned vector can satisfy the
+#' discriminant condition checked here and still drive [rb_dplr()] outside
+#' \[0, 1\] during sampling, because feasibility there is a property of the
+#' realized draws rather than of the parameters alone. Infeasibility becomes
+#' more likely as `n` grows, since it only takes one individual to fall
+#' outside the region. Positive `r` was feasible in every configuration
+#' tested. Negative `r` was not: at `h2_0 = 0.5` and 1500 causal variants,
+#' \code{r = -0.3} sampled reliably at 4000 individuals, while \code{r = -0.4} sampled
+#' reliably at 2000 individuals but failed for some seeds at 4000. Raising
+#' `min_MAF` widens the envelope. If [rb_dplr()] reports infeasible
+#' probabilities, reduce the magnitude of `r`, raise `min_MAF`, or increase
+#' the number of causal variants.
 #' @examples
 #' set.seed(1)
 #' h2_0 = .5; m = 200; n = 1000; r =.5; min_MAF=.1

@@ -28,6 +28,10 @@
 #' @param n number of observations
 #' @param mu vector of means
 #' @param U outer product component matrix
+#' @param sign either 1 or -1, selecting \eqn{C = D + U U^T} or
+#'   \eqn{C = D - U U^T}. Defaults to `attr(U, "sign")` when present and to 1
+#'   otherwise, so vectors from [am_covariance_structure()] carry the correct
+#'   structure automatically.
 #'
 #' @details This generates multivariate Bernoulli (MVB) random vectors with mean
 #' vector 'mu' and correlation matrix \eqn{C = D + U U^T} where \eqn{D} is a diagonal

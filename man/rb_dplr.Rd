@@ -4,7 +4,7 @@
 \alias{rb_dplr}
 \title{Binary random variates with Diagonal Plus Low Rank (dplr) correlations}
 \usage{
-rb_dplr(n, mu, U)
+rb_dplr(n, mu, U, sign = NULL)
 }
 \arguments{
 \item{n}{number of observations}
@@ -12,6 +12,11 @@ rb_dplr(n, mu, U)
 \item{mu}{vector of means}
 
 \item{U}{outer product component matrix}
+
+\item{sign}{either 1 or -1, selecting \eqn{C = D + U U^T} or
+\eqn{C = D - U U^T}. Defaults to \code{attr(U, "sign")} when present and to 1
+otherwise, so vectors from \code{\link[=am_covariance_structure]{am_covariance_structure()}} carry the correct
+structure automatically.}
 }
 \value{
 An \eqn{n}-by-\eqn{m} matrix of binary random variates, where \eqn{m} is

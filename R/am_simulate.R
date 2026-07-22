@@ -1,25 +1,39 @@
 #' Simulate genotype/phenotype data under equilibrium univariate AM.
 #'
 #' @param h2_0 generation zero (panmictic) heritability
-#' @param r cross-mate phenotypic correlation
+#' @param r cross-mate phenotypic correlation, in the open interval (-1, 1).
+#'   Negative values correspond to disassortative mating.
 #' @param m number of biallelic causal variants
 #' @param n sample size
 #' @param afs (optional). Allele frequencies to use. If not provided, `m` will be drawn
 #'  uniformly from the interval \[`min_MAF`, 1-`min_MAF`\]
-#' @param min_MAF (optional) minimum minor allele frequency for causal variants. 
+#' @param min_MAF (optional) minimum minor allele frequency for causal variants.
 #' Ignored if if `afs` is not NULL. Defaults to 0.1
-#' @param haplotypes logical. If TRUE, includes (phased) haploid genotypes in output. 
+#' @param haplotypes logical. If TRUE, includes (phased) haploid genotypes in output.
 #' Defaults to FALSE
+#' @param path (optional) file prefix. If supplied, genotypes are streamed to
+#'   disk in batches rather than returned in memory, and `X` is omitted from
+#'   the result. Also writes `<path>.meta` and `<path>.rds`.
+#' @param format on-disk layout when `path` is supplied. `"individual"` (the
+#'   default) stores each individual's variants contiguously in one byte per
+#'   genotype, `"variant"` stores each variant's individuals contiguously, and
+#'   `"bed"` writes a variant-major PLINK binary file at two bits per genotype
+#'   alongside `.bim` and `.fam`.
+#' @param batch_size (optional) number of individuals per batch for
+#'   `"individual"`, or variants per block for `"variant"` and `"bed"`.
+#'   Defaults to a value targeting a working buffer of roughly 128 MB.
 #'
-#' @return A list including the following objects:
-#' * `y`: phenotype vector
-#' * `g`: heritable component of the phenotype vector
-#' * `X`: matrix of diploid genotypes
-#' * `AF`: vector of allele frequencies
-#' * `beta_std`: standardized genetic effects
-#' * `beta_raw`: unstandardized genetic effects
-#' * `H`: matrix of haploid genotypes (returned only if `haplotypes`=TRUE)
-#' 
+#' @return A list. Without `path` it contains `y`, `g`, `X`, `AF`, `beta_std`,
+#' `beta_raw`, and `H` when `haplotypes` is TRUE. With `path` it is returned
+#' invisibly, omits `X`, and adds `path`, `format`, `n`, and `m`.
+#'
+#' @details The `"variant"` and `"bed"` layouts stream over loci and reproduce
+#' the in-memory genotypes exactly under a given seed at any `batch_size`. The
+#' `"individual"` layout streams over people and matches only when
+#' `batch_size >= n`, because a batch of rows is not contiguous in R's
+#' column-major random draw. `haplotypes = TRUE` cannot be combined with
+#' `path`.
+#'
 #' @export
 #'
 #' @examples
@@ -33,6 +47,15 @@
 #' ## empirical h2 vs expected equilibrium h2
 #' (emp_h2 <- var(sim_dat$g)/var(sim_dat$y))
 #' h2_eq(r, h2_0)
+#'
+#' ## stream genotypes to disk instead of holding them in memory
+#' p <- file.path(tempdir(), "am_sim")
+#' meta <- am_simulate(h2_0, r, m, n, path = p, format = "variant")
+#' dim(read_genotypes(p))
+#'
+#' ## disassortative mating
+#' neg <- am_simulate(h2_0, -0.5, m, n)
+#' var(neg$g) < var(sim_dat$g)
 
 am_simulate <- function(h2_0, r, m, n, afs = NULL, min_MAF = .1,
                         haplotypes = FALSE, path = NULL,
