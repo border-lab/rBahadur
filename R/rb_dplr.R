@@ -107,11 +107,23 @@ rb_dplr <- function(n, mu, U, sign = NULL) {
   M <- length(mu)
 
   k <- matrix(NaN, nrow=n, ncol=M)
-  rand_U <- matrix(runif(M*n), nrow=n, ncol=M)
+
+  ## Uniforms are drawn one locus at a time rather than as an n by M matrix.
+  ## R fills matrices column-major, so consuming the stream a column at a time
+  ## is bit-identical to matrix(runif(M*n), n, M) while holding n values
+  ## instead of n*M; .rb_dplr_stream() rests on the same equivalence.
+  ##
+  ## M == 2 is the exception: the recursion below counts down and reads locus
+  ## 1's column a second time, so the stream is not consumed in order. That is
+  ## long-standing behaviour at a degenerate input, and it keeps the original
+  ## up-front draw so nothing about its output changes.
+  streamed <- M >= 3L
+  rand_U <- if (streamed) NULL else matrix(runif(M*n), nrow=n, ncol=M)
+  draw <- function(j) if (streamed) runif(n) else rand_U[, j]
 
   # initial step
   p <- rep(mu[1],n)
-  k[ ,1] <- as.numeric(rand_U[,1] <= p)
+  k[ ,1] <- as.numeric(draw(1L) <= p)
 
   tmp_bool <- (k[ ,1]==0)
   p <- tmp_bool*(1-p) + (!tmp_bool)*p
@@ -127,7 +139,7 @@ rb_dplr <- function(n, mu, U, sign = NULL) {
     if (any(!is.finite(p) | p < 0 | p > 1)) {
       stop(.rb_infeasible_msg(m))
     }
-    k[ ,m] <- (rand_U[ ,m] <= p)
+    k[ ,m] <- (draw(m) <= p)
 
     tmp_bool <- (k[ ,m]==0)
     p <- tmp_bool*(1-p) + (!tmp_bool)*p
@@ -141,7 +153,7 @@ rb_dplr <- function(n, mu, U, sign = NULL) {
   if (any(!is.finite(p) | p < 0 | p > 1)) {
     stop(.rb_infeasible_msg(M))
   }
-  k[ ,M] <-(rand_U[ ,M] <= p)
+  k[ ,M] <-(draw(M) <= p)
 
   return(k)
 }

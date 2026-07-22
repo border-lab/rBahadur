@@ -51,11 +51,10 @@ alongside \code{.bim} and \code{.fam}.}
 \item{batch_size}{(optional) number of individuals per batch for
 \code{"individual"}, or variants per block for \code{"variant"} and \code{"bed"}.
 Defaults to a value targeting a working buffer of roughly 128 MB, but
-actual peak memory use is roughly 3 times that: the \code{"individual"}
-branch also allocates \code{\link[=rb_dplr]{rb_dplr()}}'s equally sized \code{rand_U} matrix plus
-the \code{Xb}/\code{t(Xb)} copies, and the \code{"variant"}/\code{"bed"} branches also copy
-the buffer passed to the callback and build a double-precision \code{Xb}
-from it.}
+actual peak memory use is roughly twice that: the \code{"individual"} branch
+also holds the diploid \code{Xb} and its transposed copy, and the
+\code{"variant"}/\code{"bed"} branches also copy the buffer passed to the callback
+and build a double-precision \code{Xb} from it.}
 }
 \value{
 A list. Without \code{path} it contains \code{y}, \code{g}, \code{X}, \code{AF}, \code{beta_std},

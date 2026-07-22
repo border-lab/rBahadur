@@ -149,6 +149,41 @@ test_that("streaming reproduces the in-memory matrix for every format", {
   }
 })
 
+test_that("a haplotype is the concatenation of its donors' blocks", {
+  ## .mosaic_hap switches to double indices once markers times haplotypes
+  ## overflows integer. Such a panel is far too large to build here, so both
+  ## branches are exercised on a small one and required to agree.
+  panel <- rBahadur:::.mosaic_check_panel(toy_panel(N = 12, p = 40))
+  Ht <- t(panel$H)
+  donor_i <- c(3L, 7L, 1L, 12L)
+  ends_i <- c(9L, 20L, 33L, 40L)
+  narrow <- rBahadur:::.mosaic_hap(donor_i, ends_i, Ht, 40L, FALSE)
+  wide <- rBahadur:::.mosaic_hap(donor_i, ends_i, Ht, 40L, TRUE)
+  expect_identical(narrow, wide)
+
+  H <- matrix(as.integer(panel$H), nrow = 12)
+  expect_identical(narrow,
+                   c(H[3, 1:9], H[7, 10:20], H[1, 21:33], H[12, 34:40]))
+})
+
+test_that("streaming matches memory when causal loci sit next to each other", {
+  ## Adjacent causal markers leave no room for a boundary, so a block spans a
+  ## single marker and the sweep has to advance pointers at neighbouring
+  ## markers. batch_size 1 additionally puts a chunk boundary between every
+  ## pair, so the carried-over pointer state is exercised at every step.
+  panel <- toy_panel(N = 20, p = 50)
+  idx <- c(1L, 2L, 3L, 25L, 49L, 50L)
+  set.seed(21)
+  ref <- am_mosaic(0.5, 0.3, n = 12, panel = panel, causal_idx = idx)$X
+  for (fmt in c("individual", "variant", "bed")) {
+    f <- file.path(tempdir(), paste0("mos_adj_", fmt))
+    set.seed(21)
+    am_mosaic(0.5, 0.3, n = 12, panel = panel, causal_idx = idx, path = f,
+              format = fmt, batch_size = 1L)
+    expect_identical(read_genotypes(f), ref)
+  }
+})
+
 test_that("a bad batch_size is rejected before anything is written", {
   panel <- toy_panel()
   p <- file.path(tempdir(), "mos_badbatch")

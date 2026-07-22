@@ -24,11 +24,10 @@
 #' @param batch_size (optional) number of individuals per batch for
 #'   `"individual"`, or variants per block for `"variant"` and `"bed"`.
 #'   Defaults to a value targeting a working buffer of roughly 128 MB, but
-#'   actual peak memory use is roughly 3 times that: the `"individual"`
-#'   branch also allocates [rb_dplr()]'s equally sized `rand_U` matrix plus
-#'   the `Xb`/`t(Xb)` copies, and the `"variant"`/`"bed"` branches also copy
-#'   the buffer passed to the callback and build a double-precision `Xb`
-#'   from it.
+#'   actual peak memory use is roughly twice that: the `"individual"` branch
+#'   also holds the diploid `Xb` and its transposed copy, and the
+#'   `"variant"`/`"bed"` branches also copy the buffer passed to the callback
+#'   and build a double-precision `Xb` from it.
 #'
 #' @return A list. Without `path` it contains `y`, `g`, `X`, `AF`, `beta_std`,
 #' `beta_raw`, and `H` when `haplotypes` is TRUE. With `path` it is returned
@@ -163,7 +162,7 @@ am_simulate <- function(h2_0, r, m, n, afs = NULL, min_MAF = .1,
         g <<- g + as.vector(Xb %*% beta_unscaled[idx])
         storage.mode(Xb) <- "integer"
         if (format == "bed") {
-          for (j in seq_len(ncol(Xb))) writeBin(.gt_pack_bed(Xb[, j]), con)
+          writeBin(.gt_pack_bed(Xb), con)
         } else {
           writeBin(as.vector(Xb), con, size = 1L)
         }

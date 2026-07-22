@@ -13,6 +13,20 @@ test_that("bed packing round trips including partial final bytes", {
   }
 })
 
+test_that("packing a block of variants matches packing them one at a time", {
+  ## whole blocks are packed in one call, so the per-variant padding has to
+  ## stay aligned to variant boundaries; sample sizes on either side of a
+  ## multiple of four are what would expose a drift
+  set.seed(43)
+  for (n in c(4L, 5L, 7L, 8L, 41L)) {
+    X <- matrix(sample(0:2, n * 6L, replace = TRUE), nrow = n)
+    X[1L, 2L] <- NA_integer_
+    one_at_a_time <- unlist(lapply(seq_len(ncol(X)),
+                                   function(j) rBahadur:::.gt_pack_bed(X[, j])))
+    expect_identical(rBahadur:::.gt_pack_bed(X), one_at_a_time)
+  }
+})
+
 test_that("missing genotypes round trip through bed", {
   g <- c(0L, NA_integer_, 2L, 1L, NA_integer_)
   expect_equal(rBahadur:::.gt_unpack_bed(rBahadur:::.gt_pack_bed(g), 5L), g)

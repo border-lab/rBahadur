@@ -44,16 +44,25 @@
 ## bits. The effect allele is written as A1, and PLINK codes count A1 copies,
 ## so dosage 2 -> 00, dosage 1 -> 10, dosage 0 -> 11, and missing -> 01.
 
+## `g` is one variant's genotypes, or a matrix of individuals by variants, in
+## which case every column is packed and padded independently and the bytes are
+## returned variant after variant, exactly as writing the columns one at a time
+## would. Packing a whole block at once matters: at genome scale this is called
+## once per variant otherwise, and the per-call vector overhead dominates.
 .gt_pack_bed <- function(g) {
-  code <- integer(length(g))
-  code[!is.na(g) & g == 2L] <- 0L
-  code[!is.na(g) & g == 1L] <- 2L
-  code[!is.na(g) & g == 0L] <- 3L
-  code[is.na(g)] <- 1L
-  pad <- (4L - (length(g) %% 4L)) %% 4L
-  if (pad > 0L) code <- c(code, integer(pad))
-  quad <- matrix(code, nrow = 4L)
-  as.raw(quad[1, ] + quad[2, ] * 4L + quad[3, ] * 16L + quad[4, ] * 64L)
+  nr <- if (is.matrix(g)) nrow(g) else length(g)
+  ## a lookup recode rather than four masked assignments, which cost several
+  ## full passes each
+  code <- c(3L, 2L, 0L)[g + 1L]
+  if (anyNA(code)) code[is.na(code)] <- 1L
+  pad <- (4L - (nr %% 4L)) %% 4L
+  if (pad > 0L) {
+    padded <- matrix(0L, nrow = nr + pad, ncol = length(code) %/% nr)
+    padded[seq_len(nr), ] <- code
+    code <- padded
+  }
+  dim(code) <- c(4L, length(code) %/% 4L)
+  as.raw(code[1L, ] + code[2L, ] * 4L + code[3L, ] * 16L + code[4L, ] * 64L)
 }
 
 .gt_unpack_bed <- function(bytes, n) {
@@ -115,7 +124,12 @@ write_genotypes <- function(X, path, format = c("individual", "variant", "bed"))
     writeBin(as.vector(t(X)), con, size = 1L)
   } else {
     writeBin(as.raw(c(0x6c, 0x1b, 0x01)), con)
-    for (j in seq_len(m)) writeBin(.gt_pack_bed(X[, j]), con)
+    ## pack in blocks, sized so the intermediate stays around 64 MB
+    step <- max(1L, min(m, as.integer(floor(16e6 / max(n, 1L)))))
+    for (start in seq(1L, m, by = step)) {
+      cols <- start:min(start + step - 1L, m)
+      writeBin(.gt_pack_bed(X[, cols, drop = FALSE]), con)
+    }
     .gt_write_plink_sidecars(path, n, m)
   }
   .gt_write_meta(path, n, m, format)

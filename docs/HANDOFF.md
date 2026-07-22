@@ -153,6 +153,59 @@ m = 25, and within replicate noise from m = 50 up. In a 1 Mb window these
 pressures conflict; at genome scale they do not, which is the regime the method
 is for.
 
+### 5. Expansion performance
+
+`am_mosaic()` was rewritten around two expansion kernels, one per output
+orientation, and the reference panel now stays `raw`. Output is unchanged:
+bit-identical to the previous implementation under the same seed across all
+formats and batch sizes, with the random number stream left in the same state.
+That was verified over 45 cases spanning both signs of `r`, explicit and
+adjacent causal indices, raw and integer panels, panels with a hotspot map and
+with no map at all, every layout at four batch sizes, `am_simulate()`,
+`write_genotypes()`, and `rb_dplr()` down to the degenerate `M = 2`.
+
+Measured on a 2,000 haplotype by 100,000 marker panel, `n = 1,000`, 400 causal
+variants, timing the call alone against a prebuilt panel:
+
+| layout | before | after | peak RSS |
+|---|---|---|---|
+| in memory | 19.3s | 5.7s | 4.0 GB to 1.3 GB |
+| individual-major | 18.7s | 7.3s | 4.0 GB to 1.3 GB |
+| variant-major | 31.0s | 5.9s | 3.6 GB to 1.4 GB |
+| bed | 36.3s | 6.0s | 3.6 GB to 1.5 GB |
+
+What changed, in rough order of how much it was worth:
+
+- **The panel is no longer expanded to integer.** `.mosaic_check_panel()` used
+  to convert the whole panel on entry, which is four bytes per allele where one
+  will do, and at genome scale costs more time than the simulation. It stays
+  `raw` and is converted a block of markers at a time where it is used.
+- **Marker-ordered sweep.** The old variant-major gather rescanned all `n`
+  individuals at every marker, in a `repeat` loop, to find who had crossed a
+  block boundary, building two-column index matrices to do it. Boundaries are
+  now compiled once into a schedule listing who changes at each marker, so a
+  marker costs one gather per parental copy. Both parental copies share one
+  pass, so the panel block is converted once rather than twice.
+- **Transposed panel for individual-major.** A haplotype is a contiguous read
+  rather than a stride over the panel. This is the one path that holds a second
+  copy of the panel, and it is still half the old footprint, since the old copy
+  was integer.
+- **`.gt_pack_bed()` takes a block.** It recodes by lookup instead of four
+  masked assignments, and packs a block of variants per call rather than one
+  call per variant. `write_genotypes()` and `am_simulate()` benefit too.
+- **`rb_dplr()` draws uniforms per locus** instead of allocating an `n` by `M`
+  matrix of them, the same column-major equivalence `.rb_dplr_stream()` already
+  documented and is tested on. `M == 2` keeps the up-front draw, because the
+  recursion counts down there and reads locus 1 twice; that is the degenerate
+  case noted under Deferred below, and its output is deliberately unchanged.
+
+Two things are worth knowing before optimising further. The remaining time is
+roughly half in the sweep itself, which is near the floor for vectorised R at
+one gather per individual per marker, and the schedule build is another 15 to
+20 percent. And the naive `n` by `p` donor index matrix is exactly what to
+avoid: at the 173,545 by 10,000 scale it is 7 GB, which is the same trap the
+published supplement falls into.
+
 ## Outstanding
 
 ### Release chores
@@ -167,8 +220,9 @@ is for.
 
 Triaged as follow-up during review rather than merge blockers:
 
-- The `.bed` magic bytes and per-variant pack loop are duplicated between
-  `R/genotype_io.R` and `R/am_simulate.R` rather than shared.
+- The `.bed` magic bytes are still written from three places rather than
+  shared. The per-variant pack loops that sat alongside them are gone:
+  `.gt_pack_bed()` now takes a whole block.
 - A mid-stream failure leaves a partial data file with no `.meta`, so it is
   unreadable rather than dangerous, but nothing unlinks it. At real scale that
   is tens of GB of litter.

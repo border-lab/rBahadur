@@ -47,6 +47,31 @@
   and documenting the tradeoff between block length and the infinitesimal
   limit underlying `vg_eq()`
 
+### Performance
+
+Output is unchanged: every one of these is bit-identical to the previous
+implementation under the same seed, across all formats and batch sizes, and
+leaves the random number stream in the same state.
+
+- `am_mosaic()` expands markers 3 to 6 times faster and in roughly a third of
+  the memory. Measured on a 2,000 haplotype by 100,000 marker panel with
+  n = 1,000 and 400 causal variants: in memory 19.3s to 5.7s, individual-major
+  18.7s to 7.3s, variant-major 31.0s to 5.9s, and bed 36.3s to 6.0s, with peak
+  resident memory falling from 4.0 GB to 1.3 GB.
+- reference panels are now held as one byte per allele rather than being
+  expanded to integer on entry, which was four times the memory and, on a
+  genome-scale panel, more time than the simulation it was preparing for
+- the variant-major and bed layouts no longer rescan every individual at every
+  marker to find who has crossed a block boundary; boundaries are compiled once
+  into a marker-ordered schedule
+- the individual-major layout copies blocks out of a transposed panel, so a
+  haplotype is a sequential read rather than a stride over the panel
+- `rb_dplr()` draws its uniforms one locus at a time rather than allocating an
+  n by m matrix of them up front, the same equivalence `am_simulate()`'s
+  streaming path already relied on
+- PLINK bed packing recodes by lookup and packs a block of variants per call
+  instead of one call per variant, which also speeds up `write_genotypes()`
+
 ### Command line interface
 
 - new `rbahadur` executable, shipped in `exec/`. `rbahadur simulate` streams a
