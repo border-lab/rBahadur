@@ -228,12 +228,12 @@ published supplement falls into.
   that prefix's `usr/bin` on `PATH` and `usr/lib/x86_64-linux-gnu` on
   `LD_LIBRARY_PATH`.
 - **Nothing is pushed.** `origin/main` is still `b887de3` from 2023-08-25, the
-  1.0.0 era, so every commit of 1.1.0 is local only: 38 of them, 23 dated
-  2026-07-21 and 15 dated 2026-07-22.
-- `git remote origin` points at `git@github.com:rborder/rBahadur.git` while
-  `DESCRIPTION` now declares `border-lab`. Both resolve, because GitHub
-  redirects the old name, but they disagree, and the redirect is the same thing
-  `--as-cran` flagged in the `URL:` field. Worth reconciling before pushing.
+  1.0.0 era, so every commit of 1.1.0 is local only, dated 2026-07-21 and
+  2026-07-22. Check with `git rev-list --count origin/main..main`.
+- `origin` now points at `git@github.com:border-lab/rBahadur.git`, matching the
+  `URL:` in `DESCRIPTION`. It previously said `rborder`, which GitHub
+  301-redirects to `border-lab`; that redirect is the same thing `--as-cran`
+  flagged in the `URL:` field. Note the hyphen: `borderlab` does not resolve.
 - If you ever regenerate `inst/extdata/kg_chr22_panel.rds`, save it with
   `version = 2` or the R dependency floor silently jumps to 3.5.0 again.
 
