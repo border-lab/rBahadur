@@ -1,6 +1,6 @@
 Package: rBahadur
 Title: Assortative Mating Simulation and Multivariate Bernoulli Variates
-Version: 1.2.0
+Version: 1.1.0
 Authors@R: 
     c(person("Richard", "Border", 
              email= "border.richard@gmail.com", role = c("aut", "cre"),
