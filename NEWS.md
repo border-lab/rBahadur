@@ -24,6 +24,29 @@
   int8, variant-major int8, and PLINK bed
 - README documents reading the int8 and bed output into Python
 
+### Local LD
+
+- new `am_mosaic()`, which combines the genome-wide linkage disequilibrium
+  induced by assortative mating with the local linkage disequilibrium induced
+  by limited recombination. Causal variants are drawn with `rb_dplr()` and the
+  intervening markers are filled by copying contiguous blocks from a reference
+  panel, following Algorithm S4 of the supplementary note. Unlike the published
+  vignette, block boundaries are drawn from a genetic map rather than uniformly,
+  so breakpoints concentrate where recombination occurs.
+- `am_mosaic()` accepts the same `path`, `format`, and `batch_size` arguments as
+  `am_simulate()`. The variant-major layouts stream over markers and the
+  individual-major layout streams over people, so no full genotype matrix is
+  held either way.
+- new `kg_reference()` returning a bundled 1000 Genomes panel (520 haplotypes
+  across 2500 common SNVs in a 1 Mb window of chromosome 22, GRCh38, with
+  genetic map positions), so examples and tests exercise real LD offline
+- new `vcf_to_panel()` to build a panel from a phased VCF and a PLINK genetic
+  map, and `download_1kg_panel()` to fetch a region of 1000 Genomes directly
+- new vignette walking through the method, verifying that the assortative
+  mating structure is preserved exactly and that local LD matches the panel,
+  and documenting the tradeoff between block length and the infinitesimal
+  limit underlying `vg_eq()`
+
 ### Command line interface
 
 - new `rbahadur` executable, shipped in `exec/`. `rbahadur simulate` streams a
