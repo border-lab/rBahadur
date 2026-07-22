@@ -4,12 +4,29 @@ Written 2026-07-22. Everything below is on `main`, committed, with
 `R CMD check --cran` reporting 0 errors, 0 warnings, 0 notes at version 1.1.0,
 and 67 testthat blocks passing with zero skips.
 
-## Verify the state in one command
+## Verify the state
 
 ```bash
 NOT_CRAN=true Rscript -e 'devtools::load_all("."); testthat::test_dir("tests/testthat")'
-_R_CHECK_SYSTEM_CLOCK_=0 Rscript -e 'devtools::check(".", cran = TRUE)'
+
+R CMD build .
+_R_CHECK_SYSTEM_CLOCK_=0 R CMD check --as-cran rBahadur_1.1.0.tar.gz
 ```
+
+**Use `--as-cran` on a built tarball, not `devtools::check(cran = TRUE)`.** The
+latter reports clean while missing real problems. It missed all three of these:
+
+- the bundled `.rds` used serialization version 3, which silently forced
+  `R >= 3.5.0`, and `R CMD build` was rewriting the declared `R (>= 3.3.0)` in
+  the tarball so source and built package disagreed about the floor
+- `URL:` pointed at `github.com/rborder/rBahadur`, which now redirects to
+  `border-lab/`, and moved URLs are flagged
+- the `rb_unstr` example took 10.4s, over CRAN's 5s example budget
+
+All three are fixed. `--as-cran` on the tarball is now `Status: OK` with zero
+notes. Also worth building and installing the tarball rather than relying on
+`load_all()`, which hides installation-time problems such as whether
+`exec/rbahadur` actually lands executable.
 
 `_R_CHECK_SYSTEM_CLOCK_=0` matters: without it the check intermittently emits a
 `future file timestamps` NOTE, which is `R CMD check` failing to reach the world
@@ -126,9 +143,12 @@ map positions) so examples and tests exercise real LD offline.
 ### Release chores
 
 - `cran-comments.md` still reads "This is a new release. 0 errors | 0 warnings
-  | 1 note" and needs rewriting for a 1.1.0 submission.
+  | 1 note" and needs rewriting for a 1.1.0 submission. It is now accurate to
+  say 0 errors, 0 warnings, 0 notes under `--as-cran`.
 - Decide whether this ships as 1.1.0 or gets split. Everything currently sits
   in one 1.1.0 section of `NEWS.md`.
+- If you ever regenerate `inst/extdata/kg_chr22_panel.rds`, save it with
+  `version = 2` or the R dependency floor silently jumps to 3.5.0 again.
 
 ### Deferred, none can produce wrong output
 
@@ -173,11 +193,24 @@ constructor accepts the value, so nothing complains.
 
 It is the same class of bug rBahadur had, and wants the same fix:
 `np.sign(R)*np.sqrt(np.abs(R))`, applied to one side's score only so high pairs
-with low. Note the existing `np.abs(1-R)` on the noise term suggests someone
-already patched around a related symptom without addressing the root.
+with low.
 
 This is why the negative-r validation was done with a from-scratch simulator
 instead of xftsim.
+
+**Status: fixed and merged.** Sasha Gusev had already reported it as
+border-lab/xftsim#18 with essentially this fix. It is now on both `main`
+(PR #21) and `dev` (PR #23), both at version 0.3.1, each verified from a fresh
+clone to realize both signs correctly. `dev` was cherry-picked rather than
+merged from `main`, so that `main`'s deletion of `claude.md` and
+`devtools/claude.md` did not ride along with a bug fix.
+
+border-lab/xftsim#22 remains open for the `v0.9alpha` branch. That branch needs
+**no code change**: it already takes `abs(self.r)` before the square root and
+negates one sex, which is the same fix by another route. What it needs is the
+regression tests ported, since it has nothing asserting a negative `r` is
+actually realized, and care when the branches converge (156 commits diverged)
+so the fix is not clobbered.
 
 ### The published supplement's vignette
 
