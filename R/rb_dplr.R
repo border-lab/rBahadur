@@ -43,6 +43,17 @@
 #'
 #' @return An \eqn{n}-by-\eqn{m} matrix of binary random variates, where \eqn{m} is
 #' the length of 'mu'.
+#'
+#' @section Warning, dropping the sign attribute:
+#' `U` vectors produced by [am_covariance_structure()] carry
+#' `attr(U, "sign")`. Subsetting or coercing `U`, including with
+#' \code{as.vector()}, \code{c()}, or `U[i]`, drops that attribute. Because
+#' `sign` here falls back to `+1` when the attribute is absent, doing so
+#' silently converts a disassortative structure into an assortative one, with
+#' no error at any point. If you manipulate `U` before calling `rb_dplr()`,
+#' pass `sign = -1` explicitly rather than relying on the attribute to
+#' survive.
+#'
 #' @export
 #'
 #' @examples
@@ -113,7 +124,7 @@ rb_dplr <- function(n, mu, U, sign = NULL) {
   # recursive steps
   for (m in 2:(M-1)) {
     p <- mu[m] + s * x * U[m]
-    if (any(p < 0 | p > 1)) {
+    if (any(!is.finite(p) | p < 0 | p > 1)) {
       stop(.rb_infeasible_msg(m))
     }
     k[ ,m] <- (rand_U[ ,m] <= p)
@@ -127,7 +138,7 @@ rb_dplr <- function(n, mu, U, sign = NULL) {
     c <- (Bk0/p)*c
   }
   p <- mu[M] + s * x * U[M]
-  if (any(p < 0 | p > 1)) {
+  if (any(!is.finite(p) | p < 0 | p > 1)) {
     stop(.rb_infeasible_msg(M))
   }
   k[ ,M] <-(rand_U[ ,M] <= p)

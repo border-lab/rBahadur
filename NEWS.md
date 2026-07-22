@@ -10,7 +10,9 @@
 - `rb_dplr()` gains a `sign` argument, and its infeasibility error now names
   the offending locus and suggests concrete remedies
 - documented that negative `r` leaves the Bahadur feasible region sooner than
-  positive `r`, reliably sampling to about `r = -0.4` at the default `min_MAF`
+  positive `r`, and that the magnitude of `r` that samples reliably depends on
+  sample size as well as `min_MAF`; see `?am_covariance_structure` for
+  measured envelopes
 - `am_simulate()` gains `path`, `format`, and `batch_size` for streaming
   genotypes to disk in batches, removing the full-matrix allocation
 - new `write_genotypes()` and `read_genotypes()` supporting individual-major

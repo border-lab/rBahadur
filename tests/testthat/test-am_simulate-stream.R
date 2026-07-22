@@ -51,6 +51,22 @@ test_that("streaming omits X, returns dimensions, and saves an rds", {
   expect_equal(readRDS(paste0(s$path, ".rds"))$AF, s$out$AF)
 })
 
+test_that("the streamed rds records the call parameters as provenance", {
+  p <- file.path(tempdir(), "sim-provenance")
+  set.seed(58)
+  out <- am_simulate(h2_0 = 0.5, r = 0.4, m = 40, n = 24,
+                     min_MAF = 0.15, path = p, format = "variant",
+                     batch_size = 8L)
+  expect_identical(out$h2_0, 0.5)
+  expect_identical(out$r, 0.4)
+  expect_identical(out$min_MAF, 0.15)
+
+  saved <- readRDS(paste0(p, ".rds"))
+  expect_identical(saved$h2_0, 0.5)
+  expect_identical(saved$r, 0.4)
+  expect_identical(saved$min_MAF, 0.15)
+})
+
 test_that("path = NULL leaves the in-memory result untouched", {
   a <- inmem(56)
   b <- inmem(56)

@@ -13,7 +13,9 @@
 #' Defaults to FALSE
 #' @param path (optional) file prefix. If supplied, genotypes are streamed to
 #'   disk in batches rather than returned in memory, and `X` is omitted from
-#'   the result. Also writes `<path>.meta` and `<path>.rds`.
+#'   the result. Writes `<path>.int8` for `format` `"individual"` or
+#'   `"variant"`, or `<path>.bed` plus `<path>.bim` and `<path>.fam` for
+#'   `"bed"`, and in every case also writes `<path>.meta` and `<path>.rds`.
 #' @param format on-disk layout when `path` is supplied. `"individual"` (the
 #'   default) stores each individual's variants contiguously in one byte per
 #'   genotype, `"variant"` stores each variant's individuals contiguously, and
@@ -21,11 +23,18 @@
 #'   alongside `.bim` and `.fam`.
 #' @param batch_size (optional) number of individuals per batch for
 #'   `"individual"`, or variants per block for `"variant"` and `"bed"`.
-#'   Defaults to a value targeting a working buffer of roughly 128 MB.
+#'   Defaults to a value targeting a working buffer of roughly 128 MB, but
+#'   actual peak memory use is roughly 3 times that: the `"individual"`
+#'   branch also allocates [rb_dplr()]'s equally sized `rand_U` matrix plus
+#'   the `Xb`/`t(Xb)` copies, and the `"variant"`/`"bed"` branches also copy
+#'   the buffer passed to the callback and build a double-precision `Xb`
+#'   from it.
 #'
 #' @return A list. Without `path` it contains `y`, `g`, `X`, `AF`, `beta_std`,
 #' `beta_raw`, and `H` when `haplotypes` is TRUE. With `path` it is returned
-#' invisibly, omits `X`, and adds `path`, `format`, `n`, and `m`.
+#' invisibly, omits `X`, and adds `path`, `format`, `n`, `m`, `h2_0`, `r`, and
+#' `min_MAF`; these are also saved in `<path>.rds` as the call's provenance
+#' record.
 #'
 #' @details The `"variant"` and `"bed"` layouts stream over loci and reproduce
 #' the in-memory genotypes exactly under a given seed at any `batch_size`. The
@@ -54,7 +63,7 @@
 #' dim(read_genotypes(p))
 #'
 #' ## disassortative mating
-#' neg <- am_simulate(h2_0, -0.5, m, n)
+#' neg <- am_simulate(h2_0, -0.3, m, n)
 #' var(neg$g) < var(sim_dat$g)
 
 am_simulate <- function(h2_0, r, m, n, afs = NULL, min_MAF = .1,
@@ -174,7 +183,10 @@ am_simulate <- function(h2_0, r, m, n, afs = NULL, min_MAF = .1,
     path = path,
     format = format,
     n = as.integer(n),
-    m = as.integer(m)
+    m = as.integer(m),
+    h2_0 = h2_0,
+    r = r,
+    min_MAF = min_MAF
   )
   saveRDS(output, paste0(path, ".rds"))
   invisible(output)

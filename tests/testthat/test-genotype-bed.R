@@ -48,3 +48,30 @@ test_that("a bed file with a bad header is rejected", {
   close(con)
   expect_error(read_genotypes(p), "variant-major PLINK")
 })
+
+test_that("a truncated bed file is rejected instead of silently reading as reference", {
+  ## A short per-variant readBin() returns an empty raw vector, and
+  ## .gt_unpack_bed() would otherwise fill that column with 0 (homozygous
+  ## reference) for every individual instead of erroring, with anyNA() FALSE.
+  set.seed(43)
+  n <- 8; m <- 4
+  X <- matrix(sample(0:2, n * m, replace = TRUE), nrow = n, ncol = m)
+  p <- file.path(tempdir(), "gt-bed-truncated")
+  write_genotypes(X, p, format = "bed")
+  f <- paste0(p, ".bed")
+  expected_size <- 3 + m * ceiling(n / 4)
+  expect_equal(file.size(f), expected_size)
+
+  ## sanity: the valid file still reads correctly before we corrupt it
+  expect_equal(read_genotypes(p), X)
+
+  raw <- readBin(f, "raw", n = expected_size)
+
+  ## drop the last variant's bytes entirely
+  writeBin(raw[seq_len(expected_size - ceiling(n / 4))], f)
+  expect_error(read_genotypes(p), "truncated|expected")
+
+  ## a file that is too long should also be rejected
+  writeBin(c(raw, as.raw(0L)), f)
+  expect_error(read_genotypes(p), "truncated|expected")
+})

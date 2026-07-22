@@ -32,6 +32,18 @@ disassortative mating reduces it. The returned vector in that case is the
 analytic continuation of the positive branch, which is purely imaginary.
 For \code{r = 0} the vector is zero, since panmixia induces no disequilibrium.
 }
+\section{Warning, dropping the sign attribute}{
+
+The returned vector carries \code{attr(U, "sign")}, which records whether the
+rank-one term is added or subtracted. Subsetting or coercing the vector,
+including with \code{as.vector()}, \code{c()}, or \code{U[i]}, drops that
+attribute. Because \code{\link[=rb_dplr]{rb_dplr()}} falls back to \code{sign = 1} when the attribute
+is absent, this silently turns a disassortative structure into an
+assortative one, with no error at any point. If you manipulate \code{U} before
+passing it to \code{\link[=rb_dplr]{rb_dplr()}}, pass \code{sign = -1} explicitly for \code{r < 0}
+rather than relying on the attribute to survive.
+}
+
 \section{Feasibility under negative assortment}{
 
 Disassortative mating leaves the Bahadur order-2 feasible region sooner

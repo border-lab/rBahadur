@@ -139,7 +139,25 @@ read_genotypes <- function(path) {
   meta <- .gt_read_meta(path)
   n <- meta$n
   m <- meta$m
-  con <- file(.gt_data_path(path, meta$format), "rb")
+  data_path <- .gt_data_path(path, meta$format)
+
+  ## Validate the file size up front. A truncated or padded file must be
+  ## rejected here: matrix(v, nrow, ncol) recycles silently whenever a short
+  ## read divides n*m, and a bed file with too few or too many bytes would
+  ## otherwise be read as if it were complete.
+  expected_size <- if (meta$format == "bed") 3 + m * ceiling(n / 4) else n * m
+  actual_size <- file.size(data_path)
+  if (is.na(actual_size)) {
+    stop("genotype file not found: ", data_path)
+  }
+  if (actual_size != expected_size) {
+    stop(sprintf(
+      "genotype file '%s' has size %.0f bytes, but %.0f bytes were expected for n = %d, m = %d, format = '%s'. The file may be truncated or corrupted.",
+      data_path, actual_size, expected_size, n, m, meta$format
+    ))
+  }
+
+  con <- file(data_path, "rb")
   on.exit(close(con))
   if (meta$format == "bed") {
     hdr <- readBin(con, "raw", n = 3L)
@@ -148,10 +166,25 @@ read_genotypes <- function(path) {
     }
     nb <- ceiling(n / 4)
     X <- matrix(NA_integer_, nrow = n, ncol = m)
-    for (j in seq_len(m)) X[, j] <- .gt_unpack_bed(readBin(con, "raw", n = nb), n)
+    for (j in seq_len(m)) {
+      bytes <- readBin(con, "raw", n = nb)
+      if (length(bytes) != nb) {
+        stop(sprintf(
+          "genotype file '%s' is truncated: variant %d expected %d bytes but only %d were read.",
+          data_path, j, nb, length(bytes)
+        ))
+      }
+      X[, j] <- .gt_unpack_bed(bytes, n)
+    }
     return(X)
   }
   v <- readBin(con, "integer", n = n * m, size = 1L, signed = TRUE)
+  if (length(v) != n * m) {
+    stop(sprintf(
+      "genotype file '%s' is truncated: expected %d values but only %d were read.",
+      data_path, n * m, length(v)
+    ))
+  }
   if (meta$format == "variant") {
     matrix(v, nrow = n, ncol = m)
   } else {

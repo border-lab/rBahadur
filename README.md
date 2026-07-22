@@ -82,9 +82,9 @@ Negative values of `r` correspond to disassortative mating, which reduces
 genetic variance rather than inflating it:
 
 ```r
-neg <- am_simulate(h2_0, r = -.5, m, n)
+neg <- am_simulate(h2_0, r = -.3, m, n)
 var(neg$g)
-vg_eq(-.5, h2_0, h2_0)
+vg_eq(-.3, h2_0, h2_0)
 ```
 
 For simulations too large to hold in memory, supply `path` to stream genotypes

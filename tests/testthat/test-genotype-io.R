@@ -53,3 +53,44 @@ test_that("reading without metadata fails clearly", {
   expect_error(read_genotypes(file.path(tempdir(), "gt-does-not-exist")),
                "metadata file not found")
 })
+
+test_that("a truncated int8 file is rejected instead of silently recycled", {
+  ## 8 x 4 -> 32 bytes; truncating to 16 bytes (half) divides n*m exactly, so
+  ## matrix(v, nrow = n, ncol = m) would otherwise recycle silently and
+  ## produce a full 8x4 matrix whose columns 3-4 are copies of columns 1-2.
+  set.seed(61)
+  X <- matrix(sample(0:2, 8 * 4, replace = TRUE), nrow = 8, ncol = 4)
+  p <- file.path(tempdir(), "gt-truncated-variant")
+  write_genotypes(X, p, format = "variant")
+  f <- paste0(p, ".int8")
+  expect_equal(file.size(f), 32)
+
+  ## sanity: the valid file still reads correctly before we corrupt it
+  expect_equal(read_genotypes(p), X)
+
+  raw <- readBin(f, "raw", n = 32)
+  writeBin(raw[1:16], f)
+  expect_equal(file.size(f), 16)
+  expect_error(read_genotypes(p), "truncated|expected")
+
+  ## a file that is too long should also be rejected
+  writeBin(c(raw, as.raw(c(0L, 1L))), f)
+  expect_error(read_genotypes(p), "truncated|expected")
+})
+
+test_that("a truncated individual-layout int8 file is rejected", {
+  set.seed(62)
+  X <- matrix(sample(0:2, 8 * 4, replace = TRUE), nrow = 8, ncol = 4)
+  p <- file.path(tempdir(), "gt-truncated-individual")
+  write_genotypes(X, p, format = "individual")
+  f <- paste0(p, ".int8")
+
+  expect_equal(read_genotypes(p), X)
+
+  raw <- readBin(f, "raw", n = 32)
+  writeBin(raw[1:16], f)
+  expect_error(read_genotypes(p), "truncated|expected")
+
+  writeBin(c(raw, as.raw(0L)), f)
+  expect_error(read_genotypes(p), "truncated|expected")
+})

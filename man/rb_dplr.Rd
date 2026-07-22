@@ -35,6 +35,18 @@ there must exist an MVB probability distribution with first moments 'mu' and
 standardized central second moments \eqn{C} such that all higher order central
 moments are zero.
 }
+\section{Warning, dropping the sign attribute}{
+
+\code{U} vectors produced by \code{\link[=am_covariance_structure]{am_covariance_structure()}} carry
+\code{attr(U, "sign")}. Subsetting or coercing \code{U}, including with
+\code{as.vector()}, \code{c()}, or \code{U[i]}, drops that attribute. Because
+\code{sign} here falls back to \code{+1} when the attribute is absent, doing so
+silently converts a disassortative structure into an assortative one, with
+no error at any point. If you manipulate \code{U} before calling \code{rb_dplr()},
+pass \code{sign = -1} explicitly rather than relying on the attribute to
+survive.
+}
+
 \examples{
 set.seed(1)
 h2_0 = .5; m = 200; n = 1000; r =.5; min_MAF=.1
