@@ -1,0 +1,226 @@
+---
+title: "Combining assortative mating with realistic local LD"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Combining assortative mating with realistic local LD}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 6,
+                      fig.height = 4)
+```
+
+## The problem
+
+Two very different processes create correlation between genetic markers.
+
+Recombination creates **local** linkage disequilibrium. Markers that sit close
+together on a chromosome are rarely separated by a crossover, so they travel
+together and their correlation decays with genetic distance. The resulting
+covariance matrix is essentially banded.
+
+Assortative mating creates **global** linkage disequilibrium. When mates
+resemble each other phenotypically, every causal variant becomes correlated
+with every other causal variant that affects the same trait, no matter which
+chromosome it sits on. The resulting covariance matrix is dense.
+
+`am_simulate()` handles the second process exactly, but treats markers as
+unlinked, so it produces no local LD at all. Asking a single Bahadur order-2
+distribution to produce both at once does not work: strong local correlations
+push the target matrix outside the feasible region described in
+`?am_covariance_structure`, and the sampler refuses.
+
+`am_mosaic()` sidesteps this by combining the two rather than approximating
+them jointly.
+
+## How it works
+
+1. Causal variants are drawn with `rb_dplr()`, exactly as in `am_simulate()`.
+   This supplies the global assortative mating structure, and it is well
+   behaved because causal variants are far apart and therefore only weakly
+   correlated by linkage.
+2. The genome is partitioned into blocks, each containing exactly one causal
+   variant. Block boundaries are drawn from the genetic map, so breakpoints
+   concentrate where recombination actually occurs.
+3. Each block is filled by copying a contiguous stretch from a real reference
+   haplotype, chosen from among those carrying the allele already drawn at that
+   block's causal variant.
+
+Because the copied stretches are real human haplotypes, local LD comes for
+free and is correct by construction. Because each donor is required to match
+at the causal variant, the assortative mating structure is left untouched.
+
+## A worked example
+
+The package bundles a small real reference panel so this runs offline: a 1 Mb
+window of chromosome 22 from phase 3 of the 1000 Genomes Project, restricted to
+common biallelic SNVs, with genetic map positions attached.
+
+```{r}
+library(rBahadur)
+
+panel <- kg_reference()
+str(panel[c("pos", "cM", "chrom", "build")], max.level = 1)
+dim(panel$haplotypes)
+```
+
+The panel carries real LD, which is the whole point of using it:
+
+```{r}
+H <- matrix(as.integer(panel$haplotypes), nrow = nrow(panel$haplotypes))
+
+ld_decay <- function(G, pos, breaks = c(0, 5, 10, 25, 50, 100, 250, 1000)) {
+  set.seed(1)
+  ii <- sort(sample(ncol(G), 300))
+  R <- suppressWarnings(stats::cor(G[, ii]))
+  d <- abs(outer(pos[ii], pos[ii], "-")) / 1000
+  ut <- upper.tri(R)
+  tapply(R[ut]^2, cut(d[ut], breaks), mean, na.rm = TRUE)
+}
+
+round(ld_decay(H, panel$pos), 4)
+```
+
+Now simulate under equilibrium assortative mating. We deliberately use few
+causal variants here, because with only 1 Mb of sequence a large number of
+causal variants would chop the region into blocks shorter than the LD itself.
+
+```{r}
+set.seed(2026)
+sim <- am_mosaic(h2_0 = 0.5, r = 0.5, n = 1500, panel = panel, m = 10)
+
+dim(sim$X)
+length(sim$causal_idx)
+```
+
+### The assortative mating structure is preserved exactly
+
+The mosaic never alters a causal genotype. The genetic values recovered from
+the output matrix are identical, not merely close, to the ones the sampler
+produced:
+
+```{r}
+g_from_X <- as.vector(sim$X[, sim$causal_idx, drop = FALSE] %*% sim$beta_raw)
+all.equal(g_from_X, as.vector(sim$g))
+```
+
+That holds for any number of causal variants. Agreement with the *equilibrium
+variance* is a separate and weaker claim, because `vg_eq()` is derived in the
+limit of infinitely many causal variants. With only ten of them the simulation
+falls well short of it:
+
+```{r}
+c(empirical = var(as.vector(sim$g)), infinitesimal_limit = vg_eq(0.5, 0.5, 0.5))
+```
+
+With enough causal variants the gap closes:
+
+```{r}
+set.seed(11)
+big <- am_mosaic(h2_0 = 0.5, r = 0.5, n = 1500, panel = panel, m = 200)
+c(empirical = var(as.vector(big$g)), infinitesimal_limit = vg_eq(0.5, 0.5, 0.5))
+c(empirical = var(as.vector(big$g)) / var(as.vector(big$y)),
+  infinitesimal_limit = h2_eq(0.5, 0.5))
+```
+
+Across replicates the shortfall runs to roughly 18% at ten causal variants and
+10% at twenty five, and falls within a few percent, which is the replicate to
+replicate noise, from about fifty upward. This is a property of `vg_eq()`
+rather than of the mosaic, and `am_simulate()` behaves the same way.
+
+### Local LD is preserved too
+
+```{r}
+round(ld_decay(sim$X, panel$pos), 4)
+```
+
+Compare that with `am_simulate()`, which treats every marker as unlinked and
+therefore produces essentially no local structure:
+
+```{r}
+set.seed(2026)
+flat <- am_simulate(h2_0 = 0.5, r = 0.5, m = 500, n = 1500)
+round(ld_decay(flat$X, panel$pos[seq_len(500)]), 4)
+```
+
+## Choosing the number of causal variants
+
+There is a real tradeoff here and it is worth being explicit about. Blocks are
+delimited by causal variants, so the number of causal variants sets the block
+length, and LD cannot survive across a block boundary except through the causal
+variants themselves.
+
+```{r}
+reach <- sapply(c(5, 20, 80), function(m) {
+  set.seed(3)
+  s <- am_mosaic(0.5, 0.3, n = 400, panel = panel, m = m)
+  d <- ld_decay(s$X, panel$pos)
+  d[["(10,25]"]]
+})
+data.frame(m = c(5, 20, 80),
+           mean_block_kb = round(diff(range(panel$pos)) / 1000 / c(5, 20, 80)),
+           r2_at_10_25kb = round(reach, 4))
+```
+
+So there are two pressures pulling in opposite directions. Local LD wants
+**few** causal variants, so that blocks stay long. The equilibrium variance
+formulas want **many**, because they are infinitesimal-limit results. In this
+1 Mb window those pressures genuinely conflict, and neither ten nor two hundred
+causal variants satisfies both.
+
+At genome scale the conflict disappears, which is the situation the method is
+built for. A thousand causal variants spread across three billion base pairs
+gives blocks averaging several megabases, far longer than the tens of
+kilobases over which human LD decays, while a thousand is more than enough for
+the equilibrium formulas. The tension here is an artifact of demonstrating on
+1 Mb.
+
+The practical rule: choose the number of causal variants so the average block
+comfortably exceeds the LD decay length of your region, then check that the
+number you land on is at least a few hundred. If it is not, your region is too
+small to want this method rather than `am_simulate()`.
+
+## Working at realistic scale
+
+For real use you want a whole chromosome rather than 1 Mb. Two helpers build a
+panel from real data. Neither is run here because both need network access and
+a substantial download.
+
+```{r, eval = FALSE}
+## build a panel directly from files you already have
+panel <- vcf_to_panel(
+  vcf = "ALL.chr22.shapeit2_integrated_v1a.GRCh38.20181129.phased.vcf.gz",
+  map = "plink.chr22.GRCh38.map",
+  min_maf = 0.01
+)
+
+## or fetch a region of 1000 Genomes and its genetic map in one call
+panel <- download_1kg_panel(chrom = "22", start = 20e6, end = 30e6)
+```
+
+At that size the genotype matrix stops fitting comfortably in memory, so
+`am_mosaic()` takes the same `path`, `format`, and `batch_size` arguments as
+`am_simulate()` and streams straight to disk:
+
+```{r, eval = FALSE}
+out <- am_mosaic(h2_0 = 0.5, r = 0.5, n = 50000, panel = panel, m = 2000,
+                 path = "chr22_am", format = "bed")
+
+## readable by plink, GCTA, or any other standard tool
+## and by read_genotypes() back in R
+```
+
+## Limitations
+
+The simulated haplotypes are mosaics of panel haplotypes, so the method cannot
+create variation the panel does not contain. A small panel will show inflated
+identity by descent between simulated individuals, and rare variants present in
+only a handful of panel haplotypes will be over-represented in some simulated
+samples. Use the largest reference panel you reasonably can.
+
+Correlation across a block boundary is broken apart from what the causal
+variants carry, so the method reproduces LD *within* blocks faithfully rather
+than reproducing the full correlation structure of the region. That is the
+price of keeping the assortative mating structure exact.

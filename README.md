@@ -26,6 +26,10 @@
   * Genotype input / output
     * `write_genotypes`: write genotypes as int8 or PLINK bed
     * `read_genotypes`: read genotypes back into an R matrix
+  * Realistic local LD
+    * `am_mosaic`: combine AM-induced global LD with recombination-induced local LD
+    * `kg_reference`: bundled 1000 Genomes reference panel
+    * `vcf_to_panel`, `download_1kg_panel`: build panels from real data
 * Command line interface
   * `rbahadur simulate`: stream a simulation to disk without opening R
   * `rbahadur info`: inspect an existing run and verify it is intact
