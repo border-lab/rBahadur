@@ -74,28 +74,22 @@ am_covariance_structure <- function(beta, AF, r) {
   rgeq <- rg_eq(r = r, h2_0)
   vgeq <- vg_eq(r = r, h2_0, h2_0)
   vtot <- vgeq + (1 - h2_0)
-  abs_r <- abs(r)
-  scale_term <- sqrt(vtot / 2) / (2 * beta_hap * sqrt(abs_r))
 
-  if (r > 0) {
-    ## C = D + U U^T
-    U <- scale_term *
-      (sqrt(4 * beta_hap**2 * abs_r / vtot + (1 - rgeq)^2) - (1 - rgeq)) * sd_hap
-    attr(U, "sign") <- 1
-  } else {
-    ## C = D - U U^T; this branch is the analytic continuation of the branch
-    ## above, which is purely imaginary for r < 0
-    disc <- (1 - rgeq)^2 - 4 * beta_hap**2 * abs_r / vtot
-    if (any(disc < 0)) {
-      stop(sprintf(
-        paste0("Infeasible negative-assortment structure at r = %g with %d causal ",
-               "variants: the largest squared standardized effect (%g) violates ",
-               "4*beta^2*|r|/vtot <= (1 - rg_eq)^2. Reduce |r| or increase `m`."),
-        r, length(beta), max(beta_hap[disc < 0]**2)))
-    }
-    U <- scale_term * ((1 - rgeq) - sqrt(disc)) * sd_hap
-    attr(U, "sign") <- -1
+  ## One expression covers both signs: for r < 0 the 1/sign(r) factor flips the
+  ## bracket, which is exactly the analytic continuation of the r > 0 branch.
+  ## The structure is D + sign(r) * U U^T, tracked by the "sign" attribute,
+  ## because U U^T is positive semidefinite however U is computed.
+  radicand <- 4 * beta_hap**2 * r / vtot + (1 - rgeq)^2
+  if (any(radicand < 0)) {
+    stop(sprintf(
+      paste0("Infeasible negative-assortment structure at r = %g with %d causal ",
+             "variants: the largest squared standardized effect (%g) violates ",
+             "4*beta^2*|r|/vtot <= (1 - rg_eq)^2. Reduce |r| or increase `m`."),
+      r, length(beta), max(beta_hap[radicand < 0]**2)))
   }
+  U <- sqrt(vtot / 2) / (2 * beta_hap * sign(r) * sqrt(abs(r))) *
+    (sqrt(radicand) - (1 - rgeq)) * sd_hap
+  attr(U, "sign") <- sign(r)
   return(U)
 }
 
