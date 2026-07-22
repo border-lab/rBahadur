@@ -1125,6 +1125,15 @@ am_simulate <- function(h2_0, r, m, n, afs = NULL, min_MAF = .1,
   if (haplotypes) {
     stop("`haplotypes = TRUE` is not supported when streaming to `path`")
   }
+  ## validate before opening any connection, so a bad value cannot leave a
+  ## partial file behind. A non-integer batch_size would otherwise recycle
+  ## silently and write duplicated rows.
+  if (!is.null(batch_size)) {
+    if (!is.numeric(batch_size) || length(batch_size) != 1L ||
+        is.na(batch_size) || batch_size < 1 || batch_size %% 1 != 0) {
+      stop("`batch_size` must be a single positive whole number, or NULL")
+    }
+  }
 
   s <- .rb_sign(U)
   g <- numeric(n)
@@ -1137,6 +1146,7 @@ am_simulate <- function(h2_0, r, m, n, afs = NULL, min_MAF = .1,
     if (is.null(batch_size)) {
       batch_size <- max(1L, min(n, as.integer(floor(128e6 / (16 * m)))))
     }
+    batch_size <- as.integer(min(batch_size, n))
     for (start in seq(1L, n, by = batch_size)) {
       nb <- min(batch_size, n - start + 1L)
       Hb <- rb_dplr(nb, AF_hap, U)
@@ -1150,6 +1160,7 @@ am_simulate <- function(h2_0, r, m, n, afs = NULL, min_MAF = .1,
     if (is.null(batch_size)) {
       batch_size <- max(1L, min(m, as.integer(floor(128e6 / (8 * n)))))
     }
+    batch_size <- as.integer(min(batch_size, m))
     if (format == "bed") writeBin(as.raw(c(0x6c, 0x1b, 0x01)), con)
     .rb_dplr_stream(
       n, AF_hap, U, s = s, block = 2L * as.integer(batch_size),
