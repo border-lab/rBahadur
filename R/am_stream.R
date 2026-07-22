@@ -20,9 +20,7 @@
   for (m in seq_len(M)) {
     p <- if (m == 1L) rep(mu[1], n) else mu[m] + s * x * U[m]
     if (any(!is.finite(p) | p < 0 | p > 1)) {
-      stop("Infeasible probabilities at column ", m,
-           ". Are you sure the specified parameters correspond to a valid ",
-           "Bahadur order-2 MVB distribution?")
+      stop(.rb_infeasible_msg(m))
     }
     km <- as.integer(runif(n) <= p)
     bi <- bi + 1L
