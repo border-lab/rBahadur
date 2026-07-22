@@ -69,3 +69,50 @@ test_that("an auto batch size is chosen when none is given", {
   s <- streamed(57, "variant", NULL)
   expect_equal(dim(s$X), c(24L, 40L))
 })
+
+test_that("invalid batch_size values are rejected with a clear error", {
+  bad <- list(
+    "non-integer" = 2.7,
+    "zero" = 0,
+    "negative" = -3,
+    "NA" = NA_real_,
+    "vector" = c(1, 2),
+    "non-numeric" = "5"
+  )
+  for (fmt in c("individual", "variant")) {
+    for (nm in names(bad)) {
+      p <- file.path(tempdir(), paste0("sim-badbatch-", fmt, "-", nm))
+      expect_error(
+        am_simulate(0.5, 0.4, 10, 8, path = p, format = fmt,
+                    batch_size = bad[[nm]]),
+        "positive whole number",
+        info = paste(fmt, nm)
+      )
+    }
+  }
+})
+
+test_that("the batch_size = 2.7 corruption case now errors instead of silently corrupting data", {
+  p <- file.path(tempdir(), "sim-corruption-regression")
+  expect_error(
+    am_simulate(0.5, 0.4, 10, 8, path = p, format = "individual",
+                batch_size = 2.7),
+    "positive whole number"
+  )
+})
+
+test_that("a rejected batch_size leaves no file behind", {
+  p <- file.path(tempdir(), paste0("sim-nofile-", as.integer(Sys.time())))
+  expect_false(any(file.exists(
+    c(paste0(p, ".int8"), paste0(p, ".bed"), paste0(p, ".meta"),
+      paste0(p, ".bim"), paste0(p, ".fam"), paste0(p, ".rds"))
+  )))
+  expect_error(
+    am_simulate(0.5, 0.4, 10, 8, path = p, format = "bed",
+                batch_size = 0),
+    "positive whole number"
+  )
+  leftover <- list.files(dirname(p), pattern = paste0("^", basename(p)),
+                          full.names = TRUE)
+  expect_equal(leftover, character(0))
+})
