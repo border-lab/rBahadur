@@ -10,6 +10,10 @@ vignette: >
 ```{r, include = FALSE}
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 6,
                       fig.height = 4)
+## This vignette intentionally uses tiny marker counts to keep its examples
+## fast and to illustrate finite-locus behavior; the warning is explained in
+## the text below instead of repeated in every chunk's output.
+options(rBahadur.warn_small_m = FALSE)
 ```
 
 ## The problem
@@ -86,6 +90,9 @@ round(ld_decay(H, panel$pos), 4)
 Now simulate under equilibrium assortative mating. We deliberately use few
 causal variants here, because with only 1 Mb of sequence a large number of
 causal variants would chop the region into blocks shorter than the LD itself.
+Calls below 50 causal variants normally warn that equilibrium quantities are
+large-locus targets; the warning is suppressed in this vignette because that
+finite-locus discrepancy is the subject of the next section.
 
 ```{r}
 set.seed(2026)
@@ -200,6 +207,10 @@ panel <- vcf_to_panel(
 panel <- download_1kg_panel(chrom = "22", start = 20e6, end = 30e6)
 ```
 
+A phased VCF is strongly recommended. Unphased calls are accepted, but the
+function warns because their written allele order must be treated as phase;
+that arbitrary ordering can create artificial haplotypes and local LD.
+
 At that size the genotype matrix stops fitting comfortably in memory, so
 `am_mosaic()` takes the same `path`, `format`, and `batch_size` arguments as
 `am_simulate()` and streams straight to disk:
@@ -210,6 +221,7 @@ out <- am_mosaic(h2_0 = 0.5, r = 0.5, n = 50000, panel = panel, m = 2000,
 
 ## readable by plink, GCTA, or any other standard tool
 ## and by read_genotypes() back in R
+## the .bim preserves chromosome, position, map, ID, and allele metadata
 ```
 
 ## Limitations

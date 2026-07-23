@@ -55,45 +55,93 @@
   }
   H <- panel$haplotypes
   if (!is.matrix(H)) stop("`panel$haplotypes` must be a matrix")
+  if (nrow(H) < 1L || ncol(H) < 2L) {
+    stop("`panel$haplotypes` must have at least one haplotype and two markers")
+  }
   bad <- "`panel$haplotypes` must contain only 0 and 1, with no missing values"
   if (is.raw(H)) {
     ## raw cannot be NA, so a single range check settles it
     if (any(H > as.raw(1L))) stop(bad)
   } else {
+    if ((!is.numeric(H) && !is.logical(H)) || anyNA(H) ||
+        any(!is.finite(H)) || any(H != 0 & H != 1)) {
+      stop(bad)
+    }
     storage.mode(H) <- "integer"
-    if (anyNA(H) || any(H != 0L & H != 1L)) stop(bad)
     H <- matrix(as.raw(H), nrow = nrow(H))
   }
   p <- ncol(H)
   if (length(panel$pos) != p) {
     stop("`panel$pos` must have one entry per column of `panel$haplotypes`")
   }
+  if (!is.numeric(panel$pos) || anyNA(panel$pos) ||
+      any(!is.finite(panel$pos)) || any(panel$pos < 1) ||
+      any(panel$pos != floor(panel$pos))) {
+    stop("`panel$pos` must contain positive whole-number base-pair positions")
+  }
   if (is.unsorted(panel$pos, strictly = TRUE)) {
     stop("`panel$pos` must be strictly increasing")
   }
   cM <- panel$cM
+  has_map <- !is.null(cM)
   if (is.null(cM)) {
     ## with no genetic map, fall back to physical distance, which makes the
     ## breakpoint distribution uniform in base pairs
     cM <- (panel$pos - panel$pos[1]) / 1e6
   }
   if (length(cM) != p) stop("`panel$cM` must have one entry per marker")
+  if (!is.numeric(cM) || anyNA(cM) || any(!is.finite(cM))) {
+    stop("`panel$cM` must contain finite numeric positions")
+  }
   if (is.unsorted(cM)) stop("`panel$cM` must be non-decreasing")
-  list(H = H, pos = panel$pos, cM = cM, N = nrow(H), p = p)
+
+  marker_field <- function(name, default) {
+    value <- panel[[name]]
+    if (is.null(value)) value <- default
+    if (length(value) == 1L) value <- rep(value, p)
+    if (length(value) != p || anyNA(value)) {
+      stop("`panel$", name, "` must have length 1 or one entry per marker")
+    }
+    as.character(value)
+  }
+
+  list(
+    H = H,
+    pos = panel$pos,
+    cM = cM,
+    plink_cM = if (has_map) cM else rep(0, p),
+    chrom = marker_field("chrom", "1"),
+    id = marker_field("id", paste0("v", seq_len(p))),
+    ref = marker_field("ref", "G"),
+    alt = marker_field("alt", "A"),
+    N = nrow(H),
+    p = p
+  )
 }
 
 ## Resolve and validate the causal marker indices.
 .mosaic_causal_idx <- function(causal_idx, m, p) {
   if (is.null(causal_idx)) {
     if (is.null(m)) stop("supply either `causal_idx` or `m`")
+    if (!is.numeric(m) || length(m) != 1L || is.na(m) || !is.finite(m) ||
+        m != floor(m)) {
+      stop("`m` must be a single whole number")
+    }
     if (m < 2 || m > p) {
       stop("`m` must be between 2 and the number of markers (", p, ")")
     }
+    m <- as.integer(m)
     causal_idx <- unique(round(seq(1, p, length.out = m)))
   }
+  if (!is.numeric(causal_idx) || !length(causal_idx) || anyNA(causal_idx) ||
+      any(!is.finite(causal_idx)) || any(causal_idx != floor(causal_idx))) {
+    stop("`causal_idx` must contain finite whole-number marker indices")
+  }
+  if (any(causal_idx < 1 | causal_idx > p)) {
+    stop("`causal_idx` must be strictly increasing and within 1:", p)
+  }
   causal_idx <- as.integer(causal_idx)
-  if (any(causal_idx < 1L | causal_idx > p) ||
-      is.unsorted(causal_idx, strictly = TRUE)) {
+  if (is.unsorted(causal_idx, strictly = TRUE)) {
     stop("`causal_idx` must be strictly increasing and within 1:", p)
   }
   if (length(causal_idx) < 2L) {
@@ -242,18 +290,22 @@
 #' realistic short-range structure. Block boundaries are sampled from the
 #' panel's genetic map, so breakpoints concentrate where recombination is high.
 #'
-#' @param h2_0 generation zero (panmictic) heritability
+#' @param h2_0 generation zero (panmictic) heritability, in `(0, 1)`
 #' @param r cross-mate phenotypic correlation, in the open interval (-1, 1).
 #'   Negative values give disassortative mating.
-#' @param n number of individuals to simulate
+#' @param n positive whole-number count of individuals to simulate
 #' @param panel reference panel: a list with `haplotypes` (a haplotypes by
 #'   markers matrix of 0 and 1, optionally stored as `raw`), `pos` (strictly
 #'   increasing base pair positions), and optionally `cM` (genetic map position
-#'   of each marker). Without `cM`, breakpoints are drawn uniformly in physical
-#'   distance. See [kg_reference()] for the bundled example.
+#'   of each marker), `chrom`, `id`, `ref`, and `alt`. Marker metadata can have
+#'   length one or one entry per marker and is carried into PLINK `.bim` output.
+#'   Haplotype value 0 denotes the reference allele and value 1 the alternate
+#'   allele. Without `cM`, breakpoints are drawn uniformly in physical distance.
+#'   See [kg_reference()] for the bundled example.
 #' @param causal_idx integer indices of the markers to treat as causal. If
 #'   `NULL`, `m` evenly spaced markers are used.
-#' @param m number of causal variants, used only when `causal_idx` is `NULL`
+#' @param m whole-number count of causal variants, used only when `causal_idx`
+#'   is `NULL`
 #' @param path,format,batch_size streaming options, exactly as in
 #'   [am_simulate()]. With `path = NULL` the genotype matrix is returned in
 #'   memory; otherwise it is streamed to disk and omitted from the result.
@@ -273,6 +325,12 @@
 #'   genome-wide assortative mating in a single Bahadur order-2 distribution is
 #'   generally not possible.
 #'
+#'   The equilibrium formulas are large-locus results. Calls with fewer than 50
+#'   causal variants are allowed but warn because realized variances can differ
+#'   materially from the targets. Set
+#'   `options(rBahadur.warn_small_m = FALSE)` to silence this warning after
+#'   deciding that the finite-locus approximation is appropriate.
+#'
 #'   Each block is copied from one panel haplotype, so within a block the
 #'   simulated data reproduces panel LD exactly, while correlation across a
 #'   breakpoint is broken apart from what the causal variants carry. More
@@ -288,7 +346,7 @@
 #'
 #' @examples
 #' panel <- kg_reference()
-#' sim <- am_mosaic(h2_0 = 0.5, r = 0.4, n = 50, panel = panel, m = 20)
+#' sim <- am_mosaic(h2_0 = 0.5, r = 0.4, n = 50, panel = panel, m = 50)
 #' dim(sim$X)
 #'
 #' ## neighbouring markers are correlated because they are copied together,
@@ -300,10 +358,20 @@ am_mosaic <- function(h2_0, r, n, panel, causal_idx = NULL, m = NULL,
                       format = c("individual", "variant", "bed"),
                       batch_size = NULL) {
   format <- match.arg(format)
+  .am_check_simulation_args(h2_0, r, n)
+  n <- as.integer(n)
+  if (!is.null(path)) .gt_check_path(path, write = TRUE)
   panel <- .mosaic_check_panel(panel)
+  if (!is.null(path) && format == "bed") {
+    .gt_prepare_plink_sidecars(
+      panel$p, panel$chrom, panel$id, panel$plink_cM, panel$pos,
+      panel$alt, panel$ref
+    )
+  }
   p <- panel$p
   causal_idx <- .mosaic_causal_idx(causal_idx, m, p)
   m <- length(causal_idx)
+  .am_warn_small_m(m, "am_mosaic")
 
   AF <- .mosaic_causal_af(panel$H, causal_idx, panel$N)
   if (any(AF <= 0 | AF >= 1)) {
@@ -312,7 +380,8 @@ am_mosaic <- function(h2_0, r, n, panel, causal_idx = NULL, m = NULL,
   }
   if (!is.null(batch_size)) {
     if (!is.numeric(batch_size) || length(batch_size) != 1L ||
-        is.na(batch_size) || batch_size < 1 || batch_size %% 1 != 0) {
+        is.na(batch_size) || !is.finite(batch_size) || batch_size < 1 ||
+        batch_size %% 1 != 0 || batch_size > .Machine$integer.max) {
       stop("`batch_size` must be a single positive whole number, or NULL")
     }
   }
@@ -408,7 +477,17 @@ am_mosaic <- function(h2_0, r, n, panel, causal_idx = NULL, m = NULL,
   }
 
   .gt_write_meta(path, n, p, format)
-  if (format == "bed") .gt_write_plink_sidecars(path, n, p)
+  if (format == "bed") {
+    .gt_write_plink_sidecars(
+      path, n, p,
+      chrom = panel$chrom,
+      id = panel$id,
+      cM = panel$plink_cM,
+      pos = panel$pos,
+      a1 = panel$alt,
+      a2 = panel$ref
+    )
+  }
   out <- c(base, list(path = path, format = format, n = as.integer(n),
                       m = as.integer(p), h2_0 = h2_0, r = r))
   saveRDS(out, paste0(path, ".rds"))

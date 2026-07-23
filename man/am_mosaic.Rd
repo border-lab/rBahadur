@@ -17,23 +17,27 @@ am_mosaic(
 )
 }
 \arguments{
-\item{h2_0}{generation zero (panmictic) heritability}
+\item{h2_0}{generation zero (panmictic) heritability, in \verb{(0, 1)}}
 
 \item{r}{cross-mate phenotypic correlation, in the open interval (-1, 1).
 Negative values give disassortative mating.}
 
-\item{n}{number of individuals to simulate}
+\item{n}{positive whole-number count of individuals to simulate}
 
 \item{panel}{reference panel: a list with \code{haplotypes} (a haplotypes by
 markers matrix of 0 and 1, optionally stored as \code{raw}), \code{pos} (strictly
 increasing base pair positions), and optionally \code{cM} (genetic map position
-of each marker). Without \code{cM}, breakpoints are drawn uniformly in physical
-distance. See \code{\link[=kg_reference]{kg_reference()}} for the bundled example.}
+of each marker), \code{chrom}, \code{id}, \code{ref}, and \code{alt}. Marker metadata can have
+length one or one entry per marker and is carried into PLINK \code{.bim} output.
+Haplotype value 0 denotes the reference allele and value 1 the alternate
+allele. Without \code{cM}, breakpoints are drawn uniformly in physical distance.
+See \code{\link[=kg_reference]{kg_reference()}} for the bundled example.}
 
 \item{causal_idx}{integer indices of the markers to treat as causal. If
 \code{NULL}, \code{m} evenly spaced markers are used.}
 
-\item{m}{number of causal variants, used only when \code{causal_idx} is \code{NULL}}
+\item{m}{whole-number count of causal variants, used only when \code{causal_idx}
+is \code{NULL}}
 
 \item{path, format, batch_size}{streaming options, exactly as in
 \code{\link[=am_simulate]{am_simulate()}}. With \code{path = NULL} the genotype matrix is returned in
@@ -65,6 +69,12 @@ limit in \code{\link[=am_covariance_structure]{am_covariance_structure()}}: repr
 genome-wide assortative mating in a single Bahadur order-2 distribution is
 generally not possible.
 
+The equilibrium formulas are large-locus results. Calls with fewer than 50
+causal variants are allowed but warn because realized variances can differ
+materially from the targets. Set
+\code{options(rBahadur.warn_small_m = FALSE)} to silence this warning after
+deciding that the finite-locus approximation is appropriate.
+
 Each block is copied from one panel haplotype, so within a block the
 simulated data reproduces panel LD exactly, while correlation across a
 breakpoint is broken apart from what the causal variants carry. More
@@ -76,7 +86,7 @@ descent between simulated individuals.
 }
 \examples{
 panel <- kg_reference()
-sim <- am_mosaic(h2_0 = 0.5, r = 0.4, n = 50, panel = panel, m = 20)
+sim <- am_mosaic(h2_0 = 0.5, r = 0.4, n = 50, panel = panel, m = 50)
 dim(sim$X)
 
 ## neighbouring markers are correlated because they are copied together,

@@ -53,3 +53,15 @@ test_that("r outside (-1, 1) is rejected", {
   expect_error(am_covariance_structure(a$beta, a$AF, 1), "open interval")
   expect_error(am_covariance_structure(a$beta, a$AF, -1), "open interval")
 })
+
+test_that("architecture inputs are validated and zero effects stay finite", {
+  expect_error(am_covariance_structure(c(0.1, NA), c(0.2, 0.8), 0.2),
+               "beta")
+  expect_error(am_covariance_structure(c(0.1, 0.2), 0.5, 0.2), "AF")
+  expect_error(am_covariance_structure(c(0.1, 0.2), c(0, 0.5), 0.2), "AF")
+  expect_error(am_covariance_structure(c(1, 1), c(0.2, 0.8), 0.2), "h2_0")
+
+  U <- am_covariance_structure(c(0, 0.3), c(0.2, 0.8), 0.4)
+  expect_true(all(is.finite(U)))
+  expect_identical(U[1:2], c(0, 0))
+})

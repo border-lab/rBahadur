@@ -46,7 +46,7 @@ install.packages("rBahadur")
 Alternatively, you can install directly from github using the `install_github` function provided by the [`remotes` library](https://github.com/r-lib/remotes):
 
 ```r
-remotes::install_github("rborder/rBahadur")
+remotes::install_github("border-lab/rBahadur")
 ```
 
 ## Usage
@@ -66,6 +66,12 @@ h2_0 = .5; m = 2000; n = 5000; r =.5; min_MAF=.05
 ## simulate genotype/phenotype data
 sim_dat <- am_simulate(h2_0, r, m, n)
 ```
+
+The equilibrium variance and heritability formulas are large-locus results.
+Simulations with fewer than 50 causal variants are still allowed, but emit a
+warning because their realized values can differ materially from those targets.
+After deciding that this finite-locus approximation is appropriate, suppress
+the warning with `options(rBahadur.warn_small_m = FALSE)`.
 
 We compare the target and realized allele frequencies:
 
@@ -162,6 +168,11 @@ G = read_plink1_bin("sim.bed", "sim.bim", "sim.fam", ref="a0", verbose=False)
 X = G.values                          # (n, m), matches read_genotypes() in R
 ```
 
+`write_genotypes()` has no marker annotations, so its `.bim` uses documented
+placeholders. In contrast, `am_mosaic(..., format = "bed")` preserves the
+reference panel's available chromosome, base-pair position, genetic map,
+marker ID, and allele fields.
+
 One caveat: the `<prefix>.rds` sidecar holding allele frequencies, effect
 sizes, and phenotypes is an R object and is not readable from Python. If the
 downstream analysis lives in Python, write those out in a portable format too:
@@ -174,6 +185,12 @@ write.csv(data.frame(AF = out$AF, beta_std = out$beta_std,
                      beta_raw = out$beta_raw),
           paste0(p, "_variants.csv"), row.names = FALSE)
 ```
+
+Reference panels should be built from phased VCFs. `vcf_to_panel()` accepts
+unphased calls so exploratory workflows are not blocked, but warns that the
+written allele order will be treated as phase and may create artificial
+haplotypes and local LD. `download_1kg_panel()` additionally requires `curl`,
+`zcat` (from gzip), and `awk`.
 
 ## Command line interface
 
@@ -227,7 +244,7 @@ split lets a calling script tell a typo from a genuine modelling failure.
 ## Citation
 
 Developed by [Richard Border](https://www.richardborder.com) and [Osman Malik](https://osmanmalik.github.io/). For further details, or if you find this software useful, please cite:
- - Border, R. and Malik, O.A., 2022. `rBahadur`: efficient simulation of structured high-dimensional genotype data with applications to assortative mating. _BMC Bioinformatics_. https://doi.org/10.1186/s12859-023-05442-6 
+ - Border, R. and Malik, O.A., 2023. `rBahadur`: efficient simulation of structured high-dimensional genotype data with applications to assortative mating. _BMC Bioinformatics_, 24, 314. https://doi.org/10.1186/s12859-023-05442-6
 
 ## Background reading:
 

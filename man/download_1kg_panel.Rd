@@ -13,7 +13,7 @@ download_1kg_panel(
 )
 }
 \arguments{
-\item{chrom}{chromosome, as a string, for example \code{"22"}}
+\item{chrom}{autosome, as a string from \code{"1"} through \code{"22"}}
 
 \item{start, end}{base pair bounds of the region to keep}
 
@@ -37,7 +37,9 @@ tests.
 Streams the VCF and stops reading once \code{end} is passed, so a small
 window costs far less than the whole chromosome. The data are the GRCh38
 phased biallelic release, and the genetic map is the GRCh38 PLINK map
-distributed with BEAGLE.
+distributed with BEAGLE. A new cache file is published only after the
+stream reaches a variant beyond \code{end}, preventing an interrupted download
+from being reused as a complete region.
 }
 \examples{
 \donttest{

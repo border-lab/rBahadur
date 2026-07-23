@@ -18,6 +18,18 @@
   )
 }
 
+.rb_check_bernoulli_inputs <- function(n, mu) {
+  if (!is.numeric(n) || length(n) != 1L || is.na(n) || !is.finite(n) ||
+      n < 1 || n != floor(n) || n > .Machine$integer.max) {
+    stop("`n` must be a single positive whole number")
+  }
+  if (!is.numeric(mu) || !length(mu) || anyNA(mu) || any(!is.finite(mu)) ||
+      any(mu <= 0 | mu >= 1)) {
+    stop("`mu` must contain finite probabilities strictly between 0 and 1")
+  }
+  as.integer(n)
+}
+
 #' Binary random variates with Diagonal Plus Low Rank (dplr) correlations
 #'
 #' Generate second Bahadur order multivariate Bernoulli random variates with
@@ -25,9 +37,9 @@
 #'
 #' @importFrom stats runif
 #'
-#' @param n number of observations
-#' @param mu vector of means
-#' @param U outer product component matrix
+#' @param n positive whole-number count of observations
+#' @param mu non-empty vector of means strictly between 0 and 1
+#' @param U finite outer-product component vector, with the same length as `mu`
 #' @param sign either 1 or -1, selecting \eqn{C = D + U U^T} or
 #'   \eqn{C = D - U U^T}. Defaults to `attr(U, "sign")` when present and to 1
 #'   otherwise, so vectors from [am_covariance_structure()] carry the correct
@@ -97,14 +109,18 @@
 
 rb_dplr <- function(n, mu, U, sign = NULL) {
 
+  n <- .rb_check_bernoulli_inputs(n, mu)
+  M <- length(mu)
+  if (!is.numeric(U) || length(U) != M || anyNA(U) || any(!is.finite(U))) {
+    stop("`U` must be a finite numeric vector with the same length as `mu`")
+  }
   if (is.null(sign)) sign <- .rb_sign(U)
-  if (length(sign) != 1L || !sign %in% c(-1, 1)) {
+  if (!is.numeric(sign) || length(sign) != 1L || is.na(sign) ||
+      !is.finite(sign) || !sign %in% c(-1, 1)) {
     stop("`sign` must be either 1 or -1")
   }
   ## bind to a local name so the argument does not shadow base::sign()
   s <- sign
-
-  M <- length(mu)
 
   k <- matrix(NaN, nrow=n, ncol=M)
 
@@ -113,10 +129,6 @@ rb_dplr <- function(n, mu, U, sign = NULL) {
   ## is bit-identical to matrix(runif(M*n), n, M) while holding n values
   ## instead of n*M; .rb_dplr_stream() rests on the same equivalence.
   ##
-  ## M == 2 is the exception: the recursion below counts down and reads locus
-  ## 1's column a second time, so the stream is not consumed in order. That is
-  ## long-standing behaviour at a degenerate input, and it keeps the original
-  ## up-front draw so nothing about its output changes.
   streamed <- M >= 3L
   rand_U <- if (streamed) NULL else matrix(runif(M*n), nrow=n, ncol=M)
   draw <- function(j) if (streamed) runif(n) else rand_U[, j]
@@ -133,21 +145,25 @@ rb_dplr <- function(n, mu, U, sign = NULL) {
   x <- Bk1*U[1]/p
   c <- 1
 
+  if (M == 1L) return(k)
+
   # recursive steps
-  for (m in 2:(M-1)) {
-    p <- mu[m] + s * x * U[m]
-    if (any(!is.finite(p) | p < 0 | p > 1)) {
-      stop(.rb_infeasible_msg(m))
+  if (M > 2L) {
+    for (m in 2:(M-1)) {
+      p <- mu[m] + s * x * U[m]
+      if (any(!is.finite(p) | p < 0 | p > 1)) {
+        stop(.rb_infeasible_msg(m))
+      }
+      k[ ,m] <- (draw(m) <= p)
+
+      tmp_bool <- (k[ ,m]==0)
+      p <- tmp_bool*(1-p) + (!tmp_bool)*p
+      Bk0 <- tmp_bool*(1-mu[m]) + (!tmp_bool)*mu[m]
+      Bk1 <- tmp_bool*(-1) + (!tmp_bool)*1
+
+      x <- (x*Bk0 + c*Bk1*U[m])/p
+      c <- (Bk0/p)*c
     }
-    k[ ,m] <- (draw(m) <= p)
-
-    tmp_bool <- (k[ ,m]==0)
-    p <- tmp_bool*(1-p) + (!tmp_bool)*p
-    Bk0 <- tmp_bool*(1-mu[m]) + (!tmp_bool)*mu[m]
-    Bk1 <- tmp_bool*(-1) + (!tmp_bool)*1
-
-    x <- (x*Bk0 + c*Bk1*U[m])/p
-    c <- (Bk0/p)*c
   }
   p <- mu[M] + s * x * U[M]
   if (any(!is.finite(p) | p < 0 | p > 1)) {
@@ -157,5 +173,3 @@ rb_dplr <- function(n, mu, U, sign = NULL) {
 
   return(k)
 }
-
-

@@ -8,6 +8,39 @@ test_that("am_simulate runs for negative, zero, and positive r", {
   }
 })
 
+test_that("small causal-variant counts are allowed with a warning", {
+  old <- getOption("rBahadur.warn_small_m")
+  on.exit(options(rBahadur.warn_small_m = old), add = TRUE)
+  options(rBahadur.warn_small_m = TRUE)
+
+  expect_warning(
+    out <- am_simulate(h2_0 = 0.5, r = 0, m = 3, n = 4),
+    "only 3 causal variants"
+  )
+  expect_identical(dim(out$X), c(4L, 3L))
+  expect_no_warning(am_simulate(h2_0 = 0.5, r = 0, m = 50, n = 4))
+
+  options(rBahadur.warn_small_m = FALSE)
+  expect_no_warning(am_simulate(h2_0 = 0.5, r = 0, m = 3, n = 4))
+})
+
+test_that("am_simulate rejects marker counts that cannot be simulated", {
+  expect_error(am_simulate(0.5, 0, m = 1, n = 4), "at least 2")
+  expect_error(am_simulate(0.5, 0, m = 2.5, n = 4), "whole number")
+})
+
+test_that("am_simulate validates scientific inputs before drawing", {
+  expect_error(am_simulate(0, 0, 10, 4), "h2_0")
+  expect_error(am_simulate(1, 0, 10, 4), "h2_0")
+  expect_error(am_simulate(0.5, Inf, 10, 4), "`r`")
+  expect_error(am_simulate(0.5, 0, 10, 0), "`n`")
+  expect_error(am_simulate(0.5, 0, 10, 4.5), "`n`")
+  expect_error(am_simulate(0.5, 0, 10, 4, min_MAF = 0.6), "min_MAF")
+  expect_error(am_simulate(0.5, 0, 3, 4, afs = c(0.2, NA, 0.8)), "afs")
+  expect_error(am_simulate(0.5, 0, 3, 4, afs = c(0, 0.5, 0.8)), "afs")
+  expect_error(am_simulate(0.5, 0, 10, 4, haplotypes = NA), "haplotypes")
+})
+
 test_that("empirical heritability tracks h2_eq across the sign range", {
   skip_on_cran()
   set.seed(22)

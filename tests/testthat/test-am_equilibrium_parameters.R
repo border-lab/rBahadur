@@ -59,6 +59,13 @@ test_that("rg_eq and vg_eq are already well behaved at r = 0", {
   }
 })
 
+test_that("equilibrium helpers reject values outside their mathematical domain", {
+  expect_error(h2_eq(1, 0.5), "open interval")
+  expect_error(h2_eq(0.2, 1), "\\[0, 1\\)")
+  expect_error(rg_eq(NA_real_, 0.5), "finite")
+  expect_error(vg_eq(0.2, -0.1, 0.5), "non-negative")
+})
+
 test_that("panmictic simulation matches h2_eq at r = 0", {
   skip_on_cran()
   set.seed(11)

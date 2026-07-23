@@ -29,6 +29,9 @@
     a <- args[i]
     if (grepl("^--", a)) {
       key <- gsub("-", "_", sub("^--", "", a))
+      if (!is.null(opts[[key]])) {
+        .cli_abort("option `", a, "` was supplied more than once")
+      }
       if (key %in% .cli_flags) {
         opts[[key]] <- TRUE
         i <- i + 1L
@@ -47,9 +50,22 @@
   list(opts = opts, positional = positional)
 }
 
+## Command-specific allowlists keep misspelled options from being silently
+## ignored (for example, `--formt bed` previously wrote the default layout).
+.cli_validate_opts <- function(opts, allowed, command = NULL) {
+  unknown <- setdiff(names(opts), allowed)
+  if (!length(unknown)) return(invisible(NULL))
+  shown <- paste0("--", gsub("_", "-", unknown))
+  where <- if (is.null(command)) "" else paste0(" for `", command, "`")
+  .cli_abort(
+    "unknown option", if (length(shown) > 1L) "s" else "",
+    where, ": ", paste(shown, collapse = ", ")
+  )
+}
+
 ## Fetch and validate a numeric option.
 .cli_num <- function(opts, name, required = TRUE, default = NULL,
-                     integer = FALSE) {
+                     integer = FALSE, positive = TRUE) {
   if (is.null(opts[[name]])) {
     if (required) {
       .cli_abort("missing required option `--", gsub("_", "-", name), "`")
@@ -57,14 +73,16 @@
     return(default)
   }
   value <- suppressWarnings(as.numeric(opts[[name]]))
-  if (is.na(value)) {
+  if (is.na(value) || !is.finite(value)) {
     .cli_abort("option `--", gsub("_", "-", name), "` must be numeric, got '",
                opts[[name]], "'")
   }
   if (integer) {
-    if (value < 1 || value %% 1 != 0) {
+    lower <- if (positive) 1 else 0
+    if (value < lower || value %% 1 != 0 || value > .Machine$integer.max) {
       .cli_abort("option `--", gsub("_", "-", name),
-                "` must be a positive whole number, got '", opts[[name]], "'")
+                "` must be a ", if (positive) "positive" else "non-negative",
+                " whole number, got '", opts[[name]], "'")
     }
     value <- as.integer(value)
   }
@@ -110,13 +128,20 @@
 }
 
 .cli_simulate <- function(opts) {
+  .cli_validate_opts(
+    opts,
+    c("h2", "r", "m", "n", "out", "format", "batch_size", "min_maf",
+      "seed", "csv", "quiet", "help", "version"),
+    "simulate"
+  )
   h2_0 <- .cli_num(opts, "h2")
   r <- .cli_num(opts, "r")
   m <- .cli_num(opts, "m", integer = TRUE)
   n <- .cli_num(opts, "n", integer = TRUE)
   min_maf <- .cli_num(opts, "min_maf", required = FALSE, default = 0.1)
   batch_size <- .cli_num(opts, "batch_size", required = FALSE, integer = TRUE)
-  seed <- .cli_num(opts, "seed", required = FALSE, integer = TRUE)
+  seed <- .cli_num(opts, "seed", required = FALSE, integer = TRUE,
+                   positive = FALSE)
 
   if (is.null(opts$out)) .cli_abort("missing required option `--out`")
   out <- opts$out
@@ -132,6 +157,13 @@
   }
   if (h2_0 <= 0 || h2_0 >= 1) {
     .cli_abort("`--h2` must lie in the open interval (0, 1)")
+  }
+  if (r <= -1 || r >= 1) {
+    .cli_abort("`--r` must lie in the open interval (-1, 1)")
+  }
+  if (m < 2L) .cli_abort("`--m` must be at least 2")
+  if (min_maf < 0 || min_maf > 0.5) {
+    .cli_abort("`--min-maf` must lie in the closed interval [0, 0.5]")
   }
 
   if (!is.null(seed)) set.seed(seed)
@@ -163,12 +195,24 @@
 }
 
 .cli_info <- function(prefix) {
-  meta <- .gt_read_meta(prefix)
+  meta_error <- NULL
+  meta <- tryCatch(
+    .gt_read_meta(prefix),
+    error = function(e) {
+      meta_error <<- conditionMessage(e)
+      NULL
+    }
+  )
+  if (is.null(meta)) {
+    cat(sprintf("prefix    %s\n", prefix))
+    cat(sprintf("status    CORRUPT: %s\n", meta_error))
+    return(2L)
+  }
   data_file <- .gt_data_path(prefix, meta$format)
   expected <- if (meta$format == "bed") {
-    3 + meta$m * ceiling(meta$n / 4)
+    3 + as.double(meta$m) * ceiling(meta$n / 4)
   } else {
-    meta$n * meta$m
+    as.double(meta$n) * meta$m
   }
   actual <- if (file.exists(data_file)) file.size(data_file) else NA_real_
 
@@ -187,6 +231,18 @@
   }
   if (actual != expected) {
     cat("status    CORRUPT: size does not match the metadata\n")
+    return(2L)
+  }
+  integrity_error <- tryCatch({
+    if (meta$format == "bed") {
+      .gt_check_bed_header(data_file)
+    } else {
+      .gt_check_int8_values(data_file)
+    }
+    NULL
+  }, error = function(e) conditionMessage(e))
+  if (!is.null(integrity_error)) {
+    cat(sprintf("status    CORRUPT: %s\n", integrity_error))
     return(2L)
   }
   cat("status    ok\n")
@@ -237,20 +293,36 @@ rbahadur_main <- function(args = commandArgs(trailingOnly = TRUE)) {
     positional <- parsed$positional
 
     if (isTRUE(opts$version)) {
+      .cli_validate_opts(opts, c("version"))
       cat(as.character(utils::packageVersion("rBahadur")), "\n", sep = "")
       return(invisible(0L))
     }
-    if (isTRUE(opts$help) || length(positional) == 0L) {
+    if (isTRUE(opts$help)) {
+      .cli_validate_opts(opts, c("help"))
       cat(.cli_usage(), sep = "\n")
-      return(invisible(if (length(positional) == 0L && !isTRUE(opts$help)) 1L else 0L))
+      return(invisible(0L))
+    }
+    if (length(positional) == 0L) {
+      .cli_validate_opts(opts, character(0))
+      cat(.cli_usage(), sep = "\n")
+      return(invisible(1L))
     }
 
     command <- positional[1]
     switch(command,
-      simulate = .cli_simulate(opts),
+      simulate = {
+        if (length(positional) != 1L) {
+          .cli_abort("`simulate` does not take positional arguments")
+        }
+        .cli_simulate(opts)
+      },
       info = {
+        .cli_validate_opts(opts, character(0), "info")
         if (length(positional) < 2L) {
           .cli_abort("`info` requires a prefix, as in `rbahadur info my_run`")
+        }
+        if (length(positional) > 2L) {
+          .cli_abort("`info` takes exactly one prefix")
         }
         .cli_info(positional[2])
       },

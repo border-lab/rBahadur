@@ -25,6 +25,8 @@ test_that("the argument parser handles values, flags, and negative numbers", {
 test_that("an option missing its value is rejected rather than silently eaten", {
   expect_error(rBahadur:::.cli_parse(c("--h2", "--r", "0.3")),
                "requires a value", class = "rbahadur_usage_error")
+  expect_error(rBahadur:::.cli_parse(c("--r", "0.2", "--r", "0.3")),
+               "more than once", class = "rbahadur_usage_error")
 })
 
 test_that("exit statuses distinguish success, usage errors, and failures", {
@@ -42,6 +44,22 @@ test_that("exit statuses distinguish success, usage errors, and failures", {
                                 "--format", "vcf")), 1L)
   expect_identical(quiet_main("info"), 1L)
   expect_identical(quiet_main(c("info", tmp("does_not_exist"))), 2L)
+})
+
+test_that("unknown options and extra positional arguments are usage errors", {
+  p <- tmp("cli_unknown_option")
+  old <- list.files(dirname(p), pattern = "^cli_unknown_option", full.names = TRUE)
+  if (length(old)) unlink(old)
+
+  expect_identical(
+    quiet_main(c("simulate", "--h2", ".5", "--r", ".3", "--m", "50",
+                 "--n", "10", "--out", p, "--formt", "bed")),
+    1L
+  )
+  expect_length(list.files(dirname(p), pattern = "^cli_unknown_option"), 0L)
+  expect_identical(quiet_main(c("simulate", "extra")), 1L)
+  expect_identical(quiet_main(c("info", "prefix", "extra")), 1L)
+  expect_identical(quiet_main(c("info", "prefix", "--quiet")), 1L)
 })
 
 test_that("simulate writes the expected files for every format", {
@@ -69,6 +87,11 @@ test_that("--seed makes runs reproducible and differing seeds differ", {
   quiet_main(args(a, "99")); quiet_main(args(b, "99")); quiet_main(args(c3, "100"))
   expect_identical(read_genotypes(a), read_genotypes(b))
   expect_false(identical(read_genotypes(a), read_genotypes(c3)))
+
+  zero <- tmp("cli_seed_zero")
+  expect_identical(quiet_main(c("simulate", "--h2", "0.5", "--r", "0",
+                                "--m", "40", "--n", "10", "--out", zero,
+                                "--seed", "0", "--quiet")), 0L)
 })
 
 test_that("--csv writes portable sidecars with the right shape", {
@@ -101,6 +124,27 @@ test_that("info reports ok for an intact run and flags a truncated one", {
   f <- paste0(p, ".int8")
   all_bytes <- readBin(f, "raw", file.size(f))
   writeBin(all_bytes[seq_len(length(all_bytes) / 2)], f)
+  expect_output(expect_identical(loud_main(c("info", p)), 2L), "CORRUPT")
+})
+
+test_that("info flags malformed metadata instead of guessing a layout", {
+  p <- tmp("cli_bad_meta")
+  quiet_main(c("simulate", "--h2", "0.5", "--r", "0.3", "--m", "30",
+               "--n", "24", "--out", p, "--quiet"))
+  meta <- readLines(paste0(p, ".meta"))
+  meta <- sub("format: individual", "format: varaint", meta, fixed = TRUE)
+  writeLines(meta, paste0(p, ".meta"))
+  expect_output(expect_identical(loud_main(c("info", p)), 2L), "CORRUPT")
+})
+
+test_that("info detects invalid int8 dosage bytes", {
+  p <- tmp("cli_bad_byte")
+  quiet_main(c("simulate", "--h2", "0.5", "--r", "0.3", "--m", "30",
+               "--n", "24", "--out", p, "--quiet"))
+  f <- paste0(p, ".int8")
+  bytes <- readBin(f, "raw", n = file.size(f))
+  bytes[10] <- as.raw(255)
+  writeBin(bytes, f)
   expect_output(expect_identical(loud_main(c("info", p)), 2L), "CORRUPT")
 })
 

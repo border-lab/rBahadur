@@ -42,11 +42,70 @@ test_that("metadata round trips", {
   expect_identical(meta$dtype, "int8")
 })
 
+test_that("corrupt metadata is rejected before its layout is interpreted", {
+  p <- file.path(tempdir(), "gt-corrupt-meta")
+  X <- matrix(0L, nrow = 4, ncol = 6)
+  original <- c(
+    "rBahadur_genotypes: 1", "format: individual", "n: 4", "m: 6",
+    "dtype: int8"
+  )
+  cases <- list(
+    c("rBahadur_genotypes: 2", original[-1]),
+    sub("format: individual", "format: varaint", original, fixed = TRUE),
+    sub("n: 4", "n: 0", original, fixed = TRUE),
+    sub("m: 6", "m: 6.5", original, fixed = TRUE),
+    sub("dtype: int8", "dtype: bed2bit", original, fixed = TRUE),
+    original[-4],
+    c(original, "m: 6"),
+    c(original, "fromat: individual")
+  )
+  patterns <- c("version", "format", "positive whole", "positive whole",
+                "incompatible", "missing", "duplicate", "unknown")
+
+  for (i in seq_along(cases)) {
+    write_genotypes(X, p, format = "individual")
+    writeLines(cases[[i]], paste0(p, ".meta"))
+    expect_error(read_genotypes(p), patterns[i], info = paste("case", i))
+  }
+})
+
 test_that("invalid genotypes and missing values are rejected", {
   p <- file.path(tempdir(), "gt-bad")
   expect_error(write_genotypes(matrix(3L, 2, 2), p, "variant"), "0, 1, or 2")
+  expect_error(write_genotypes(matrix(0.5, 2, 2), p, "variant"),
+               "integer-valued")
+  expect_error(write_genotypes(matrix(0.5, 2, 2), p, "bed"),
+               "integer-valued")
+  expect_error(write_genotypes(matrix(Inf, 2, 2), p, "variant"),
+               "integer-valued")
+  expect_error(write_genotypes(matrix("1", 2, 2), p, "variant"),
+               "integer-valued")
   expect_error(write_genotypes(matrix(NA_integer_, 2, 2), p, "variant"), "bed")
   expect_error(write_genotypes(1:4, p, "variant"), "matrix")
+  expect_error(write_genotypes(matrix(integer(), 0, 2), p, "variant"),
+               "at least one individual")
+  expect_error(write_genotypes(matrix(integer(), 2, 0), p, "variant"),
+               "at least one individual")
+  expect_error(write_genotypes(matrix(0L, 2, 2), character(), "variant"),
+               "single non-empty")
+})
+
+test_that("PLINK sidecars reject invalid physical positions and marker text", {
+  p <- file.path(tempdir(), "gt-bad-sidecar")
+  expect_error(
+    rBahadur:::.gt_write_plink_sidecars(p, 2, 2, pos = c(1, 2.5)),
+    "positive whole numbers"
+  )
+  expect_error(
+    rBahadur:::.gt_write_plink_sidecars(
+      p, 2, 2, pos = c(1, .Machine$integer.max)
+    ),
+    "2\\^31 - 2"
+  )
+  expect_error(
+    rBahadur:::.gt_write_plink_sidecars(p, 2, 2, chrom = "chr 1"),
+    "no whitespace"
+  )
 })
 
 test_that("reading without metadata fails clearly", {
@@ -93,4 +152,15 @@ test_that("a truncated individual-layout int8 file is rejected", {
 
   writeBin(c(raw, as.raw(0L)), f)
   expect_error(read_genotypes(p), "truncated|expected")
+})
+
+test_that("invalid int8 dosage bytes are detected", {
+  X <- matrix(0L, nrow = 3, ncol = 4)
+  p <- file.path(tempdir(), "gt-invalid-byte")
+  write_genotypes(X, p, format = "variant")
+  f <- paste0(p, ".int8")
+  bytes <- readBin(f, "raw", n = 12)
+  bytes[5] <- as.raw(255)
+  writeBin(bytes, f)
+  expect_error(read_genotypes(p), "other than 0, 1, or 2")
 })

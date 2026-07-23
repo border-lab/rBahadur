@@ -52,16 +52,23 @@
 #' output <- am_covariance_structure(betas, afs, r)
 #' @export
 am_covariance_structure <- function(beta, AF, r) {
-  if (!is.numeric(r) || length(r) != 1L || is.na(r)) {
-    stop("`r` must be a single non-missing numeric value")
+  if (!is.numeric(beta) || !length(beta) || anyNA(beta) ||
+      any(!is.finite(beta))) {
+    stop("`beta` must be a non-empty vector of finite numbers")
   }
-  if (r <= -1 || r >= 1) {
-    stop("`r` must lie in the open interval (-1, 1)")
+  if (!is.numeric(AF) || length(AF) != length(beta) || anyNA(AF) ||
+      any(!is.finite(AF)) || any(AF <= 0 | AF >= 1)) {
+    stop(paste0("`AF` must contain one finite allele frequency strictly ",
+                "between 0 and 1 for each effect"))
   }
+  if (!is.numeric(r) || length(r) != 1L) {
+    stop("`r` must be a single finite number in the open interval (-1, 1)")
+  }
+  h2_0 <- sum(beta**2)
+  .am_check_equilibrium_args(r, h2_0)
   ## obtain haploid substitution effects, variances
   beta_hap <- rep(beta, each = 2)
   sd_hap <- rep(sqrt(AF * (1 - AF)), each = 2)
-  h2_0 <- sum(beta**2)
 
   ## panmixia induces no linkage disequilibrium
   if (r == 0) {
@@ -87,9 +94,12 @@ am_covariance_structure <- function(beta, AF, r) {
              "4*beta^2*|r|/vtot <= (1 - rg_eq)^2. Reduce |r| or increase `m`."),
       r, length(beta), max(beta_hap[radicand < 0]**2)))
   }
-  U <- sqrt(vtot / 2) / (2 * beta_hap * sign(r) * sqrt(abs(r))) *
-    (sqrt(radicand) - (1 - rgeq)) * sd_hap
+  U <- numeric(length(beta_hap))
+  nonzero <- beta_hap != 0
+  U[nonzero] <-
+    sqrt(vtot / 2) /
+    (2 * beta_hap[nonzero] * sign(r) * sqrt(abs(r))) *
+    (sqrt(radicand[nonzero]) - (1 - rgeq)) * sd_hap[nonzero]
   attr(U, "sign") <- sign(r)
   return(U)
 }
-

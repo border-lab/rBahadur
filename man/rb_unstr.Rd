@@ -7,11 +7,11 @@
 rb_unstr(n, mu, C)
 }
 \arguments{
-\item{n}{number of observations}
+\item{n}{positive whole-number count of observations}
 
-\item{mu}{vector of means}
+\item{mu}{non-empty vector of means strictly between 0 and 1}
 
-\item{C}{correlation matrix}
+\item{C}{finite symmetric correlation matrix matching the length of \code{mu}}
 }
 \value{
 An \eqn{n}-by-\eqn{m} matrix of binary random variates, where \eqn{m} is the
@@ -31,7 +31,7 @@ are zero.
 }
 \examples{
 set.seed(1)
-h2_0 = .5; m = 60; n = 200; r =.5; min_MAF=.1
+h2_0 = .5; m = 30; n = 100; r =.5; min_MAF=.1
 
 ## draw standardized diploid allele substitution effects
 beta <- scale(rnorm(m))*sqrt(h2_0 / m)

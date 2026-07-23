@@ -10,7 +10,8 @@ write_genotypes(X, path, format = c("individual", "variant", "bed"))
 \item{X}{an integer matrix of genotypes with individuals in rows and
 variants in columns, taking values 0, 1, or 2}
 
-\item{path}{file prefix. Layout \code{"individual"} and \code{"variant"} write
+\item{path}{non-empty file prefix in an existing directory. Layout
+\code{"individual"} and \code{"variant"} write
 \verb{<path>.int8}; \code{"bed"} writes \verb{<path>.bed} plus \verb{<path>.bim} and
 \verb{<path>.fam}. All layouts write \verb{<path>.meta}.}
 
@@ -24,6 +25,12 @@ binary file at two bits per genotype.}
 }
 \description{
 Write genotypes to a binary file
+}
+\details{
+Because this function receives no marker annotations, PLINK \code{.bim}
+output uses placeholder chromosome, position, and allele values. PLINK files
+written by \code{\link[=am_mosaic]{am_mosaic()}} instead preserve the reference panel's available
+chromosome, physical position, genetic map, ID, and allele metadata.
 }
 \examples{
 X <- matrix(sample(0:2, 20, replace = TRUE), nrow = 4)

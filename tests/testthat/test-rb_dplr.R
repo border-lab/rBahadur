@@ -43,6 +43,47 @@ test_that("an invalid sign is rejected", {
   expect_error(rb_dplr(5, rep(0.5, 6), rep(0.01, 6), sign = 0), "either 1 or -1")
 })
 
+test_that("one- and two-variable Bernoulli draws use the correct recursion", {
+  set.seed(101)
+  expected_one <- matrix(as.numeric(runif(12) <= 0.3), ncol = 1)
+  set.seed(101)
+  expect_identical(rb_dplr(12, 0.3, 0), expected_one)
+
+  set.seed(102)
+  uniforms <- matrix(runif(24), nrow = 12, ncol = 2)
+  expected_two <- uniforms <= matrix(c(0.3, 0.7), 12, 2, byrow = TRUE)
+  storage.mode(expected_two) <- "double"
+  set.seed(102)
+  expect_identical(rb_dplr(12, c(0.3, 0.7), c(0, 0)), expected_two)
+})
+
+test_that("rb_dplr validates dimensions and probabilities", {
+  expect_error(rb_dplr(0, 0.5, 0), "`n`")
+  expect_error(rb_dplr(2.5, 0.5, 0), "`n`")
+  expect_error(rb_dplr(4, numeric(), numeric()), "`mu`")
+  expect_error(rb_dplr(4, c(0, 0.5), c(0, 0)), "`mu`")
+  expect_error(rb_dplr(4, c(0.2, 0.8), 0), "same length")
+  expect_error(rb_dplr(4, c(0.2, 0.8), c(0, NA)), "finite numeric")
+})
+
+test_that("rb_unstr handles small dimensions and validates correlations", {
+  set.seed(103)
+  one <- rb_unstr(10, 0.4, matrix(1, 1, 1))
+  expect_identical(dim(one), c(10L, 1L))
+  expect_true(all(one %in% 0:1))
+
+  set.seed(104)
+  two <- rb_unstr(10, c(0.4, 0.6), diag(2))
+  expect_identical(dim(two), c(10L, 2L))
+  expect_true(all(two %in% 0:1))
+
+  expect_error(rb_unstr(0, 0.5, matrix(1, 1, 1)), "`n`")
+  expect_error(rb_unstr(4, c(0.5, 1), diag(2)), "`mu`")
+  expect_error(rb_unstr(4, c(0.4, 0.6), matrix(1, 1, 1)), "matching `mu`")
+  expect_error(rb_unstr(4, c(0.4, 0.6), matrix(c(1, 0.2, 0, 1), 2)),
+               "symmetric")
+})
+
 test_that("infeasible probabilities trigger an actionable error message", {
   ## Use deterministic inputs that drive the recursion out of range quickly.
   ## The real invariant we want to guard is that the message is O(1) in the

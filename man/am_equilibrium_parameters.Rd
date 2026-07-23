@@ -14,11 +14,13 @@ rg_eq(r, h2_0)
 vg_eq(r, vg_0, h2_0)
 }
 \arguments{
-\item{r}{cross-mate phenotypic correlation}
+\item{r}{cross-mate phenotypic correlation, with values in \verb{(-1, 1)}}
 
-\item{h2_0}{generation zero (panmictic) heritability}
+\item{h2_0}{generation zero (panmictic) heritability, with values in
+\verb{[0, 1)}}
 
-\item{vg_0}{generation zero (panmictic) additive genetic variance component}
+\item{vg_0}{non-negative generation zero (panmictic) additive genetic
+variance component}
 }
 \value{
 A single numerical quantity representing the equilibrium heritability (\code{h2_eq}),

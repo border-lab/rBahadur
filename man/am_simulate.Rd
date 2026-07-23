@@ -18,14 +18,14 @@ am_simulate(
 )
 }
 \arguments{
-\item{h2_0}{generation zero (panmictic) heritability}
+\item{h2_0}{generation zero (panmictic) heritability, in \verb{(0, 1)}}
 
 \item{r}{cross-mate phenotypic correlation, in the open interval (-1, 1).
 Negative values correspond to disassortative mating.}
 
-\item{m}{number of biallelic causal variants}
+\item{m}{number of biallelic causal variants; a whole number of at least 2}
 
-\item{n}{sample size}
+\item{n}{positive whole-number sample size}
 
 \item{afs}{(optional). Allele frequencies to use. If not provided, \code{m} will be drawn
 uniformly from the interval [\code{min_MAF}, 1-\code{min_MAF}]}
@@ -73,6 +73,12 @@ the in-memory genotypes exactly under a given seed at any \code{batch_size}. The
 \code{batch_size >= n}, because a batch of rows is not contiguous in R's
 column-major random draw. \code{haplotypes = TRUE} cannot be combined with
 \code{path}.
+
+The equilibrium formulas are large-locus results. Calls with fewer than 50
+causal variants are allowed but warn because realized variances can differ
+materially from the targets, especially when \code{m} is very small. Set
+\code{options(rBahadur.warn_small_m = FALSE)} to silence this warning after
+deciding that the finite-locus approximation is appropriate.
 }
 \examples{
 set.seed(1)

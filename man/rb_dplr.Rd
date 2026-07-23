@@ -7,11 +7,11 @@
 rb_dplr(n, mu, U, sign = NULL)
 }
 \arguments{
-\item{n}{number of observations}
+\item{n}{positive whole-number count of observations}
 
-\item{mu}{vector of means}
+\item{mu}{non-empty vector of means strictly between 0 and 1}
 
-\item{U}{outer product component matrix}
+\item{U}{finite outer-product component vector, with the same length as \code{mu}}
 
 \item{sign}{either 1 or -1, selecting \eqn{C = D + U U^T} or
 \eqn{C = D - U U^T}. Defaults to \code{attr(U, "sign")} when present and to 1

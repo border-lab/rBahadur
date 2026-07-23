@@ -2,7 +2,7 @@
 % Please edit documentation in R/reference.R
 \name{vcf_to_panel}
 \alias{vcf_to_panel}
-\title{Build a reference panel from a phased VCF}
+\title{Build a reference panel from a VCF}
 \usage{
 vcf_to_panel(
   vcf,
@@ -21,20 +21,22 @@ panel carries no \code{cM} and \code{\link[=am_mosaic]{am_mosaic()}} places brea
 physical distance.}
 
 \item{min_maf}{drop markers whose minor allele frequency in the panel falls
-below this. Defaults to 0.05.}
+below this. Must lie in \verb{[0, 0.5]}; defaults to 0.05.}
 
 \item{max_markers}{if given, thin evenly to at most this many markers}
 
 \item{max_samples}{if given, keep only the first this many samples}
 }
 \value{
-A panel list suitable for \code{\link[=am_mosaic]{am_mosaic()}}.
+A panel list suitable for \code{\link[=am_mosaic]{am_mosaic()}}, including chromosome, ID,
+reference allele, and alternate allele metadata for each retained marker.
 }
 \description{
-Reads a phased, biallelic VCF and returns a panel in the form
-\code{\link[=am_mosaic]{am_mosaic()}} expects. The VCF must be phased, meaning genotypes look like
-\code{0|1} rather than \code{0/1}, because the mosaic copies haplotypes rather than
-genotypes.
+Reads a biallelic VCF and returns a panel in the form \code{\link[=am_mosaic]{am_mosaic()}} expects.
+Phased genotypes such as \code{0|1} are strongly recommended because the mosaic
+copies haplotypes rather than genotypes. Unphased genotypes such as \code{0/1}
+are accepted with a warning and their written allele order is treated as if
+it were phase.
 }
 \examples{
 ## a tiny phased VCF written on the fly

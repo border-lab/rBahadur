@@ -5,9 +5,9 @@
 #'
 #' @importFrom stats runif
 #'
-#' @param n number of observations
-#' @param mu vector of means
-#' @param C correlation matrix
+#' @param n positive whole-number count of observations
+#' @param mu non-empty vector of means strictly between 0 and 1
+#' @param C finite symmetric correlation matrix matching the length of `mu`
 #'
 #' @details This generates multivariate Bernoulli (MVB) random vectors with mean vector
 #'  'mu' and correlation matrix 'C'. 'mu' must take values in the open unit interval and
@@ -22,7 +22,7 @@
 #'
 #' @examples
 #' set.seed(1)
-#' h2_0 = .5; m = 60; n = 200; r =.5; min_MAF=.1
+#' h2_0 = .5; m = 30; n = 100; r =.5; min_MAF=.1
 #'
 #' ## draw standardized diploid allele substitution effects
 #' beta <- scale(rnorm(m))*sqrt(h2_0 / m)
@@ -67,13 +67,24 @@
 
 rb_unstr <- function(n, mu, C) {
 
+  n <- .rb_check_bernoulli_inputs(n, mu)
   M <- length(mu)
+  if (!is.numeric(C) || !is.matrix(C) ||
+      !identical(dim(C), c(M, M)) || anyNA(C) || any(!is.finite(C))) {
+    stop("`C` must be a finite numeric square matrix matching `mu`")
+  }
+  if (max(abs(C - t(C))) > sqrt(.Machine$double.eps) ||
+      any(abs(diag(C) - 1) > sqrt(.Machine$double.eps))) {
+    stop("`C` must be a symmetric correlation matrix with diagonal 1")
+  }
   k <- matrix(NaN, nrow=n, ncol=M)
   rand_U <- matrix(runif(M*n), nrow=n, ncol=M)
 
   # initial step
   p <- rep(mu[1],n)
   k[ ,1] <- as.numeric(rand_U[,1] <= p)
+
+  if (M == 1L) return(k)
 
 
   Bk0_values_matrix <- rbind(1-mu,mu)
@@ -94,26 +105,30 @@ rb_unstr <- function(n, mu, C) {
   c <- 1
 
   # recursive steps
-  for (m in 2:(M-1)) {
-    p <- drop(mu[m] + v%*%C[1:(m-1),m])
-    if (any(p < 0 | p > 1)) {
-      stop('Infeasible probabilities. Are you sure specified parameters 
-           correspond to a valid Bahadur order-2 MVB distribution?')
-    }
-    k[ ,m] <- (rand_U[ ,m] <= p)
+  if (M > 2L) {
+    for (m in 2:(M-1)) {
+      p <- drop(mu[m] + v%*%C[1:(m-1),m])
+      if (any(!is.finite(p) | p < 0 | p > 1)) {
+        stop("Infeasible probabilities at locus ", m,
+             ". The supplied means and correlation matrix do not define a ",
+             "valid Bahadur order-2 MVB distribution.", call. = FALSE)
+      }
+      k[ ,m] <- (rand_U[ ,m] <= p)
 
-    tmp_bool <- (k[ ,m]==0)
-    p <- tmp_bool*(1-p) + (!tmp_bool)*p
-    Bk0_mat[m,] <- Bk0 <- Bk0_values_matrix[cbind(k[ ,m]+1,
-                                                  rep(m,n))]
-    Bk1_mat[m,] <- Bk1 <-  Bk1_bvec[k[ ,m]+1]
-    v <- cbind(v*Bk0/p, + c*Bk1/p)
-    c <- (Bk0/p)*c
+      tmp_bool <- (k[ ,m]==0)
+      p <- tmp_bool*(1-p) + (!tmp_bool)*p
+      Bk0_mat[m,] <- Bk0 <- Bk0_values_matrix[cbind(k[ ,m]+1,
+                                                    rep(m,n))]
+      Bk1_mat[m,] <- Bk1 <-  Bk1_bvec[k[ ,m]+1]
+      v <- cbind(v*Bk0/p, + c*Bk1/p)
+      c <- (Bk0/p)*c
+    }
   }
   p <- drop(mu[M] + v%*%C[1:(M-1),M])
-  if (any(p < 0 | p > 1)) {
-    stop(mu[M],' ',p,'Infeasible probabilities. Are you sure specified parameters 
-         correspond to a valid Bahadur order-2 MVB distribution?')
+  if (any(!is.finite(p) | p < 0 | p > 1)) {
+    stop("Infeasible probabilities at locus ", M,
+         ". The supplied means and correlation matrix do not define a valid ",
+         "Bahadur order-2 MVB distribution.", call. = FALSE)
   }
   k[ ,M] <-(rand_U[ ,M] <= p)
 

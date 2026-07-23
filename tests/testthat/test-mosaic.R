@@ -42,8 +42,16 @@ test_that("malformed panels are rejected", {
   bad <- good
   bad$haplotypes <- matrix(as.raw(rep(2L, length(good$pos) * 4)), nrow = 4)
   expect_error(rBahadur:::.mosaic_check_panel(bad), "only 0 and 1")
+  bad <- good
+  bad$haplotypes <- matrix(as.numeric(bad$haplotypes), nrow = nrow(bad$haplotypes))
+  bad$haplotypes[1, 1] <- 0.5
+  expect_error(rBahadur:::.mosaic_check_panel(bad), "only 0 and 1")
   bad <- good; bad$cM <- rev(good$cM)
   expect_error(rBahadur:::.mosaic_check_panel(bad), "non-decreasing")
+  bad <- good; bad$pos[2] <- bad$pos[2] + 0.5
+  expect_error(rBahadur:::.mosaic_check_panel(bad), "whole-number")
+  bad <- good; bad$haplotypes <- bad$haplotypes[, 0, drop = FALSE]; bad$pos <- numeric()
+  expect_error(rBahadur:::.mosaic_check_panel(bad), "two markers")
 })
 
 test_that("a panel with no map falls back to physical distance", {
@@ -59,10 +67,32 @@ test_that("causal indices are validated", {
   expect_error(am_mosaic(0.5, 0.3, 5, panel), "either `causal_idx` or `m`")
   expect_error(am_mosaic(0.5, 0.3, 5, panel, m = 1), "between 2 and")
   expect_error(am_mosaic(0.5, 0.3, 5, panel, m = 1e6), "between 2 and")
+  expect_error(am_mosaic(0.5, 0.3, 5, panel, m = 3.5), "whole number")
   expect_error(am_mosaic(0.5, 0.3, 5, panel, causal_idx = c(5L, 3L)),
                "strictly increasing")
   expect_error(am_mosaic(0.5, 0.3, 5, panel, causal_idx = c(1L, 10000L)),
                "strictly increasing|within")
+  expect_error(am_mosaic(0.5, 0.3, 5, panel, causal_idx = c(1.9, 20)),
+               "whole-number")
+  expect_error(am_mosaic(0.5, 0.3, 5, panel, causal_idx = c(1, NA)),
+               "whole-number")
+  expect_error(am_mosaic(0.5, 0.3, 5, panel, causal_idx = c("1", "20")),
+               "whole-number")
+  expect_error(am_mosaic(0, 0.3, 5, panel, m = 3), "h2_0")
+  expect_error(am_mosaic(0.5, 1, 5, panel, m = 3), "`r`")
+  expect_error(am_mosaic(0.5, 0.3, 0, panel, m = 3), "`n`")
+})
+
+test_that("am_mosaic warns but continues with few causal variants", {
+  old <- getOption("rBahadur.warn_small_m")
+  on.exit(options(rBahadur.warn_small_m = old), add = TRUE)
+  options(rBahadur.warn_small_m = TRUE)
+
+  expect_warning(
+    sim <- am_mosaic(0.5, 0, n = 4, panel = toy_panel(), m = 3),
+    "am_mosaic.*only 3 causal variants"
+  )
+  expect_identical(dim(sim$X), c(4L, 60L))
 })
 
 test_that("block boundaries follow the genetic map, not physical distance", {
@@ -149,6 +179,49 @@ test_that("streaming reproduces the in-memory matrix for every format", {
   }
 })
 
+test_that("mosaic PLINK output preserves panel marker metadata", {
+  panel <- toy_panel(p = 60)
+  panel$chrom <- "22"
+  panel$id <- paste0("rs", seq_len(60))
+  panel$ref <- rep(c("A", "C"), 30)
+  panel$alt <- rep(c("G", "T"), 30)
+  p <- file.path(tempdir(), "mos_metadata")
+
+  set.seed(32)
+  am_mosaic(0.5, 0, n = 8, panel = panel, m = 10, path = p,
+            format = "bed")
+  bim <- utils::read.table(paste0(p, ".bim"), header = FALSE,
+                           stringsAsFactors = FALSE)
+
+  expect_identical(as.character(bim[[1]]), rep("22", 60))
+  expect_identical(bim[[2]], panel$id)
+  expect_equal(bim[[3]], panel$cM, tolerance = 1e-12)
+  expect_equal(bim[[4]], panel$pos)
+  expect_identical(bim[[5]], panel$alt)
+  expect_identical(bim[[6]], panel$ref)
+})
+
+test_that("mosaic PLINK metadata is preflighted before simulation or writing", {
+  panel <- toy_panel()
+  panel$pos <- as.double(.Machine$integer.max) + seq_len(ncol(panel$haplotypes))
+  p <- file.path(tempdir(), "mos_invalid_plink_position")
+  unlink(paste0(p, c(".bed", ".bim", ".fam", ".meta", ".rds")))
+  expect_error(
+    am_mosaic(0.5, 0, 5, panel, m = 3, path = p, format = "bed"),
+    "2\\^31 - 2"
+  )
+  expect_false(any(file.exists(paste0(
+    p, c(".bed", ".bim", ".fam", ".meta", ".rds")
+  ))))
+
+  panel <- toy_panel()
+  panel$chrom <- "chr 22"
+  expect_error(
+    am_mosaic(0.5, 0, 5, panel, m = 3, path = p, format = "bed"),
+    "no whitespace"
+  )
+})
+
 test_that("a haplotype is the concatenation of its donors' blocks", {
   ## .mosaic_hap switches to double indices once markers times haplotypes
   ## overflows integer. Such a panel is far too large to build here, so both
@@ -193,7 +266,7 @@ test_that("a bad batch_size is rejected before anything is written", {
   expect_length(list.files(dirname(p), pattern = "mos_badbatch"), 0L)
 })
 
-test_that("vcf_to_panel reads a phased VCF and rejects an unphased one", {
+test_that("vcf_to_panel reads phased VCFs and warns on unphased calls", {
   hdr <- paste(c("#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER",
                  "INFO", "FORMAT", "s1", "s2", "s3", "s4"), collapse = "\t")
   rec <- function(pos, gts) paste(c("22", pos, ".", "A", "G", ".", ".", ".",
@@ -205,12 +278,25 @@ test_that("vcf_to_panel reads a phased VCF and rejects an unphased one", {
   panel <- vcf_to_panel(phased, min_maf = 0)
   expect_identical(dim(panel$haplotypes), c(8L, 2L))
   expect_identical(panel$pos, c(100L, 200L))
+  expect_identical(panel$chrom, c("22", "22"))
+  expect_identical(panel$id, c(".", "."))
+  expect_identical(panel$ref, c("A", "A"))
+  expect_identical(panel$alt, c("G", "G"))
   expect_null(panel$cM)
 
   unphased <- tempfile(fileext = ".vcf")
   writeLines(c("##fileformat=VCFv4.2", hdr,
                rec(100, c("0/1", "1/1", "0/0", "1/0"))), unphased)
-  expect_error(vcf_to_panel(unphased, min_maf = 0), "not phased")
+  expect_warning(
+    unphased_panel <- vcf_to_panel(unphased, min_maf = 0),
+    "unphased.*treated as phase"
+  )
+  expect_identical(dim(unphased_panel$haplotypes), c(8L, 1L))
+
+  mixed <- tempfile(fileext = ".vcf")
+  writeLines(c("##fileformat=VCFv4.2", hdr,
+               rec(100, c("0|1", "1/1", "0|0", "1|0"))), mixed)
+  expect_warning(vcf_to_panel(mixed, min_maf = 0), "unphased")
 
   expect_error(vcf_to_panel(tempfile()), "VCF not found")
 })
@@ -226,11 +312,140 @@ test_that("vcf_to_panel applies the maf filter and attaches a map", {
                rec(200, c("0|0", "0|0", "0|0", "1|0"))),  # rare
              vcf)
   expect_identical(ncol(vcf_to_panel(vcf, min_maf = 0.2)$haplotypes), 1L)
-  expect_error(vcf_to_panel(vcf, min_maf = 0.9), "no markers survived")
+  expect_error(vcf_to_panel(vcf, min_maf = 0.9), "\\[0, 0.5\\]")
 
   map <- tempfile(fileext = ".map")
   writeLines(c("22\t.\t0.0\t50", "22\t.\t1.0\t250"), map)
   panel <- vcf_to_panel(vcf, map = map, min_maf = 0)
   expect_length(panel$cM, 2L)
   expect_false(is.unsorted(panel$cM))
+})
+
+test_that("VCF records are checked independently and symbolic alleles are excluded", {
+  header <- c("#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER",
+              "INFO", "FORMAT", "s1")
+  hdr <- paste(header, collapse = "\t")
+  vcf <- tempfile(fileext = ".vcf")
+
+  ## The two bad widths sum to exactly two full records. Flattening all fields
+  ## before checking would therefore accept this malformed file.
+  short <- paste(c("22", "100", ".", "A", "G", ".", ".", ".", "GT"),
+                 collapse = "\t")
+  long <- paste(c("22", "200", ".", "A", "G", ".", ".", ".", "GT",
+                  "0|1", "extra"), collapse = "\t")
+  writeLines(c("##fileformat=VCFv4.2", hdr, short, long), vcf)
+  expect_error(vcf_to_panel(vcf, min_maf = 0), "record on line 2 has 9 fields")
+
+  rec <- function(pos, ref, alt) {
+    paste(c("22", pos, ".", ref, alt, ".", ".", ".", "GT", "0|1"),
+          collapse = "\t")
+  }
+  writeLines(c("##fileformat=VCFv4.2", hdr,
+               rec(100, "A", "*"), rec(200, "C", "T")), vcf)
+  panel <- vcf_to_panel(vcf, min_maf = 0)
+  expect_identical(panel$pos, 200L)
+  expect_identical(panel$ref, "C")
+  expect_identical(panel$alt, "T")
+})
+
+test_that("VCFs and genetic maps cannot mix chromosomes", {
+  hdr <- paste(c("#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER",
+                 "INFO", "FORMAT", "s1"), collapse = "\t")
+  rec <- function(chrom, pos) {
+    paste(c(chrom, pos, ".", "A", "G", ".", ".", ".", "GT", "0|1"),
+          collapse = "\t")
+  }
+  vcf <- tempfile(fileext = ".vcf")
+  writeLines(c("##fileformat=VCFv4.2", hdr, rec("22", 100), rec("1", 200)),
+             vcf)
+  expect_error(vcf_to_panel(vcf, min_maf = 0), "exactly one chromosome")
+
+  writeLines(c("##fileformat=VCFv4.2", hdr, rec("22", 100), rec("22", 200)),
+             vcf)
+  map <- tempfile(fileext = ".map")
+  writeLines(c("1\t.\t50\t100", "1\t.\t100\t200",
+               "chr22\t.\t1\t100", "chr22\t.\t2\t200"), map)
+  panel <- vcf_to_panel(vcf, map = map, min_maf = 0)
+  expect_identical(panel$cM, c(1, 2))
+
+  writeLines(c("1\t.\t50\t100", "1\t.\t100\t200"), map)
+  expect_error(vcf_to_panel(vcf, map = map, min_maf = 0),
+               "at least two rows for chromosome 22")
+})
+
+test_that("vcf_to_panel rejects malformed genotype fields", {
+  hdr <- paste(c("#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER",
+                 "INFO", "FORMAT", "s1"), collapse = "\t")
+  rec <- function(format, gt) paste(c("22", "100", "rs1", "A", "G", ".",
+                                      ".", ".", format, gt), collapse = "\t")
+  vcf <- tempfile(fileext = ".vcf")
+  writeLines(c("##fileformat=VCFv4.2", hdr, rec("DP:GT", "8:0|1")), vcf)
+  expect_error(vcf_to_panel(vcf, min_maf = 0), "FORMAT.*begin with GT")
+
+  writeLines(c("##fileformat=VCFv4.2", hdr, rec("GT", "0|2")), vcf)
+  expect_error(vcf_to_panel(vcf, min_maf = 0), "alleles 0, 1, or")
+
+  expect_error(vcf_to_panel(character()), "single non-empty path")
+})
+
+test_that("missing external panel commands are named clearly", {
+  expect_error(
+    rBahadur:::.panel_require_commands("rbahadur-command-that-does-not-exist"),
+    "requires external command.*rbahadur-command-that-does-not-exist"
+  )
+})
+
+test_that("download coordinates and cache paths are validated before networking", {
+  expect_error(download_1kg_panel("../22", 100, 200), "autosome")
+  expect_error(download_1kg_panel("X", 100, 200), "autosome")
+  expect_error(download_1kg_panel("22", 100.5, 200), "whole-number")
+  expect_error(download_1kg_panel("22", 200, 100), "start <= end")
+  expect_error(download_1kg_panel("22", 100, 200, dest = character()),
+               "single non-empty")
+})
+
+test_that("streamed regions are complete and published atomically", {
+  skip_on_os("windows")
+  skip_if(any(!nzchar(Sys.which(c("curl", "zcat", "awk")))))
+
+  make_gzip <- function(pos) {
+    path <- tempfile(fileext = ".vcf.gz")
+    con <- gzfile(path, "wt")
+    on.exit(close(con))
+    header <- paste(c("#CHROM", "POS", "ID", "REF", "ALT", "QUAL",
+                      "FILTER", "INFO", "FORMAT", "s1"), collapse = "\t")
+    records <- vapply(
+      pos,
+      function(bp) paste(c("22", bp, ".", "A", "G", ".", ".", ".",
+                           "GT", "0|1"), collapse = "\t"),
+      character(1)
+    )
+    writeLines(c("##fileformat=VCFv4.2", header, records), con)
+    path
+  }
+
+  complete <- make_gzip(c(100, 200, 300))
+  region <- tempfile(fileext = ".vcf")
+  unlink(region)
+  rBahadur:::.panel_stream_region(
+    paste0("file://", normalizePath(complete, winslash = "/")),
+    100, 200, region
+  )
+  out <- readLines(region)
+  expect_length(out, 4L)
+  expect_match(out[1], "^##fileformat=")
+  expect_match(out[3], "^22\\t100\\t")
+  expect_match(out[4], "^22\\t200\\t")
+
+  incomplete <- make_gzip(c(100, 200))
+  failed_region <- tempfile(fileext = ".vcf")
+  unlink(failed_region)
+  expect_error(
+    rBahadur:::.panel_stream_region(
+      paste0("file://", normalizePath(incomplete, winslash = "/")),
+      100, 200, failed_region
+    ),
+    "did not reach"
+  )
+  expect_false(file.exists(failed_region))
 })

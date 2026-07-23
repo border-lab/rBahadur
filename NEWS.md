@@ -31,6 +31,14 @@
 - new `write_genotypes()` and `read_genotypes()` supporting individual-major
   int8, variant-major int8, and PLINK bed
 - README documents reading the int8 and bed output into Python
+- genotype matrices are now checked before integer conversion, so fractional
+  or non-finite dosages are rejected rather than silently truncated
+- genotype metadata is now parsed strictly: unknown layouts, incompatible
+  dtypes, invalid dimensions, duplicate fields, and unsupported versions are
+  reported as corruption instead of being guessed; int8 readers and
+  `rbahadur info` also detect dosage bytes outside 0, 1, and 2
+- PLINK output from `am_mosaic()` now carries the reference panel's chromosome,
+  physical position, genetic map, marker ID, and allele metadata when present
 
 ### Local LD
 
@@ -50,6 +58,14 @@
   genetic map positions), so examples and tests exercise real LD offline
 - new `vcf_to_panel()` to build a panel from a phased VCF and a PLINK genetic
   map, and `download_1kg_panel()` to fetch a region of 1000 Genomes directly
+- `vcf_to_panel()` also accepts unphased calls, with a prominent warning that
+  their supplied allele order is treated as phase and can create artificial LD
+- VCF records are now width-checked independently, symbolic alleles are not
+  mistaken for SNVs, marker positions must be ordered, and genetic-map
+  interpolation is restricted to the retained chromosome
+- streamed reference downloads are written to temporary files and published
+  to the cache only after the requested interval has demonstrably completed;
+  map archives and extracted maps are likewise published atomically
 - new vignette walking through the method, verifying that the assortative
   mating structure is preserved exactly and that local LD matches the panel,
   and documenting the tradeoff between block length and the infinitesimal
@@ -57,9 +73,10 @@
 
 ### Performance
 
-Output is unchanged: every one of these is bit-identical to the previous
-implementation under the same seed, across all formats and batch sizes, and
-leaves the random number stream in the same state.
+Except for the corrected one- and two-variable `rb_dplr()` edge cases, output
+on previously tested simulation dimensions is unchanged: it is bit-identical
+under the same seed across all formats and batch sizes and leaves the random
+number stream in the same state.
 
 - `am_mosaic()` expands markers 3 to 6 times faster and in roughly a third of
   the memory. Measured on a 2,000 haplotype by 100,000 marker panel with
@@ -90,11 +107,24 @@ leaves the random number stream in the same state.
   on the search path; `rbahadur_main()` exposes the same interface from R
 - `--csv` writes portable `_pheno.csv` and `_variants.csv` sidecars alongside
   the R-only `.rds`, for pipelines that continue outside R
+- unknown or misspelled command-line options and extra positional arguments
+  are now rejected as usage errors instead of being silently ignored
+- duplicate options are rejected, and `--seed 0` is accepted as a valid R seed
 
 ### Other
 
 - added a testthat suite
 - `utils` added to Imports
+- simulations with fewer than 50 causal variants remain supported but now warn
+  that the equilibrium variance and heritability formulas are large-locus
+  targets; the warning can be disabled with
+  `options(rBahadur.warn_small_m = FALSE)`
+- declared and preflight-checked the external commands used by
+  `download_1kg_panel()`
+- simulation, Bernoulli, equilibrium, reference-panel, metadata, and PLINK
+  inputs now receive explicit domain and integer validation; the broken
+  one- and two-variable recursion edges in `rb_dplr()` and `rb_unstr()` are
+  handled directly
 
 ## version 1.0.0
 
